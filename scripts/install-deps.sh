@@ -18,6 +18,14 @@ apt install -y --no-install-recommends \
     ros-humble-image-transport \
     ros-humble-cv-bridge
 
+# ouster_ros (real Ouster driver) build/runtime deps — pulled by `rosdep install
+# --from-paths src/ouster-ros` but listed here so the real_mapping path builds one-shot.
+apt install -y --no-install-recommends \
+    ros-humble-pcl-conversions \
+    libpcl-dev \
+    libtins-dev \
+    libpcap-dev
+
 git clone https://github.com/borglab/gtsam
 cd gtsam && git checkout 4.3a0
 mkdir build && cd build

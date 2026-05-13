@@ -1,23 +1,23 @@
 services:
   # ===== AMD64 =====
   glim-humble-docker:
+    image: cuda13.1.2:humble-uv-nvm
     build: .
-    image: cuda12.9.1:humble-uv-nvm
     container_name: glim-humble-docker
-    privileged: true
-    tty: true
-    network_mode: host
-    ipc: host
-    environment:
-      - DISPLAY=${DISPLAY:-host.docker.internal:0}
-      - QT_X11_NO_MITSHM=1
     volumes:
       - .:/root/glim-humble-docker
       - /tmp/.X11-unix:/tmp/.X11-unix
+      - uv-cache:/root/.cache/uv
+    environment:
+      - DISPLAY=${DISPLAY:-host.docker.internal:0}
+      - QT_X11_NO_MITSHM=1
+    network_mode: host
+    working_dir: /root/glim-humble-docker
+    ipc: host
+    privileged: true
+    tty: true
 
   glim-humble-docker-gpu:
-    extends:
-      service: glim-humble-docker
     container_name: glim-humble-docker-gpu
     deploy:
       resources:
@@ -26,29 +26,36 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu, utility, compute, graphics]
+    extends:
+      service: glim-humble-docker
     profiles:
       - gpu
 
   # ===== Jetson ARM64 =====
   glim-humble-docker-jetson:
+    image: cudnn8.9-jetson:humble-uv-nvm
     build:
       args:
         BASE_IMAGE: dustynv/cudnn:8.9-r36.2.0
-    image: cudnn8.9-jetson:humble-uv-nvm
     container_name: glim-humble-docker-jetson
-    runtime: nvidia
-    privileged: true
-    tty: true
-    network_mode: host
-    ipc: host
-    environment:
-      - DISPLAY=${DISPLAY}
-      - QT_X11_NO_MITSHM=1
-      - XAUTHORITY=/root/.Xauthority
     volumes:
       - .:/root/glim-humble-docker
       - /tmp/.X11-unix:/tmp/.X11-unix
       - /tmp/argus_socket:/tmp/argus_socket
       - ~/.Xauthority:/root/.Xauthority
+      - uv-cache:/root/.cache/uv
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+      - XAUTHORITY=/root/.Xauthority
+    network_mode: host
+    working_dir: /root/glim-humble-docker
+    ipc: host
+    privileged: true
     profiles:
       - jetson
+    runtime: nvidia
+    tty: true
+
+volumes:
+  uv-cache:
