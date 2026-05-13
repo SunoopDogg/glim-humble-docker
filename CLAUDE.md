@@ -54,14 +54,17 @@ docker exec -it glim-humble-docker bash
 # --- inside the container ---
 bash scripts/install-deps.sh                  # build GTSAM / iridescence / gtsam_points (slow, one-time)
 source /opt/ros/humble/setup.bash
-colcon build                                  # build glim + glim_ros2 + go2_glim_mapping (+ unitree-go2-ros2 submodule)
+colcon build                                  # build glim + glim_ros2 + ouster_ros + go2_glim_mapping (+ unitree-go2-ros2)
 source install/setup.bash
 bash scripts/link_ros_to_venv.sh              # uv sync + write ROS2 import bridge + activate venv
+
+# run go2_glim_mapping pure-logic unit tests (extrinsic/launch_config — no ROS needed, host or container)
+cd src/go2_glim_mapping && uv run --no-project --with numpy --with pyyaml --with pytest python -m pytest test/
 ```
 
 ## Gotchas
 
-- The submodules (`src/glim`, `src/glim_ros2`) are **empty checkouts** until `git submodule update --init --recursive` is run. Build commands fail silently-ish without this.
+- The four submodules (`src/glim`, `src/glim_ros2`, `src/ouster-ros`, `src/unitree-go2-ros2`) are **empty checkouts** until `git submodule update --init --recursive` is run. Build commands fail silently-ish without this.
 - `gtsam_points` defaults to `BUILD_WITH_CUDA=ON` in `install-deps.sh`. On a GPU-less machine you must edit that flag to `OFF` or the build fails.
 - The GLIM real-time viewer needs working X11 forwarding — the compose files already mount `/tmp/.X11-unix` and set `DISPLAY`; the host must allow X connections (`xhost +local:`).
 - GLIM's ROS2 node is named **`glim_ros`** (NOT the `glim_rosnode` executable) → topics are `/glim_ros/{map,odom,...}`; `config_path`/`use_sim_time`/`dump_path` are params of node `glim_ros`.
@@ -72,4 +75,6 @@ bash scripts/link_ros_to_venv.sh              # uv sync + write ROS2 import brid
 - Real Ouster bring-up uses `real_mapping.launch.py` (ouster-ros + `profile:=real`). `timestamp_mode` MUST be `TIME_FROM_INTERNAL_OSC` (NOT `TIME_FROM_ROS_TIME` — host-receive jitter decouples LiDAR↔IMU); `point_type:=native` gives per-point `t` for deskew. PTP is deferred for v1 (Ouster supplies both points + imu on one clock; INTERNAL_OSC stamps aren't Unix wall-clock, so add PTP if you need tf/rviz wall-clock alignment).
 - Real-hardware `T_lidar_imu` is **derived from Ouster metadata** (`ros2 run go2_glim_mapping derive_extrinsic --metadata <json> --frame os_lidar`), not guessed — newer units have a 180° Z rotation (`qz≈1,qw≈0`); identity causes drift / "indeterminant linear system". Confirm the cloud `frame_id` (`os_lidar` vs `os_sensor`) and always validate with glim_ext `libimu_validator.so`.
 - `mapping.launch.py profile:=real` patches `config_sensors.json` (`global_shutter_lidar=false` + `T_lidar_imu` from `config/calib/ouster_os1_32.yaml`) into `/tmp/glim_cfg_effective` at launch; the committed sim config is never edited (same temp-copy trick as `viewer:=true`).
-- `ouster_ros` rosdeps not yet in `install-deps.sh`: `ros-humble-pcl-conversions`, `libpcl-dev`, `libtins-dev`, `libpcap-dev` (apt-installed in the running container by `rosdep install`; lost on container recreate).
+- `ouster_ros` rosdeps (`ros-humble-pcl-conversions`, `libpcl-dev`, `libtins-dev`, `libpcap-dev`) are in `install-deps.sh`; if missing in a running container, `rosdep install --from-paths src/ouster-ros --ignore-src -r -y`.
+- Build the real Ouster driver with `colcon build --packages-up-to ouster_ros` (pulls the `ouster-sensor-msgs` dep; `--packages-select` alone misses it).
+- `ament_flake8` is NOT a passing gate here — committed code uses ~108-char lines (E501). Match existing style; don't reflow to 99.
