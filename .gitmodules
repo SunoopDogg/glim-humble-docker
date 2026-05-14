@@ -4,3 +4,6 @@
 [submodule "src/glim_ros2"]
 	path = src/glim_ros2
 	url = https://github.com/koide3/glim_ros2
+[submodule "src/unitree-go2-ros2"]
+	path = src/unitree-go2-ros2
+	url = https://github.com/anujjain-dev/unitree-go2-ros2.git
