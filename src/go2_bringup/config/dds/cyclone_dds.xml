@@ -6,7 +6,7 @@
 <CycloneDDS>
   <Domain id="0">
     <General>
-      <NetworkInterfaceAddress>eth0</NetworkInterfaceAddress>
+      <NetworkInterfaceAddress>enx32aababacca0</NetworkInterfaceAddress>
       <AllowMulticast>true</AllowMulticast>
     </General>
   </Domain>
