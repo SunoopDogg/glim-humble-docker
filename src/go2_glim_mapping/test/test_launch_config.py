@@ -3,7 +3,7 @@ import os
 
 import pytest
 
-from go2_glim_mapping.launch_config import prepare_config
+from go2_glim_mapping.launch_config import load_extrinsic_yaml, prepare_config
 
 
 def _make_src(tmp_path):
@@ -63,3 +63,9 @@ def test_bad_extrinsic_length_raises(tmp_path):
     dst = str(tmp_path / "out")
     with pytest.raises(ValueError):
         prepare_config(src, dst, profile='real', t_lidar_imu=[1, 2, 3])
+
+
+def test_load_extrinsic_yaml_reads_tum_list(tmp_path):
+    p = tmp_path / "calib.yaml"
+    p.write_text("# comment\nT_lidar_imu: [0.0, 0.0, 0.03, 0.0, 0.0, 1.0, 0.0]\n")
+    assert load_extrinsic_yaml(str(p)) == [0.0, 0.0, 0.03, 0.0, 0.0, 1.0, 0.0]
