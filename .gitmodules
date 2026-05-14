@@ -7,3 +7,7 @@
 [submodule "src/unitree-go2-ros2"]
 	path = src/unitree-go2-ros2
 	url = https://github.com/anujjain-dev/unitree-go2-ros2.git
+[submodule "src/ouster-ros"]
+	path = src/ouster-ros
+	url = https://github.com/ouster-lidar/ouster-ros.git
+	branch = ros2
