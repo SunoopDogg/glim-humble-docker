@@ -29,6 +29,14 @@ def generate_launch_description():
         DeclareLaunchArgument('sensor_hostname', description='Ouster hostname or IP (e.g. os1-xxxx.local)'),
         DeclareLaunchArgument('udp_dest', default_value='',
                               description='Host IP for sensor UDP data (blank = driver auto-detect)'),
+        DeclareLaunchArgument('lidar_port', default_value='0',
+                              description='UDP port for lidar data (0 = auto-assign)'),
+        DeclareLaunchArgument('imu_port', default_value='0',
+                              description='UDP port for IMU data (0 = auto-assign)'),
+        DeclareLaunchArgument('point_type', default_value='native',
+                              description='Ouster point type (native/xyz/xyzi)'),
+        DeclareLaunchArgument('udp_profile_lidar', default_value='',
+                              description='Ouster UDP lidar profile (blank = sensor default)'),
         DeclareLaunchArgument('viewer', default_value='false',
                               description='Enable GLIM Iridescence live viewer (needs X11+GL)'),
     ]
@@ -38,8 +46,11 @@ def generate_launch_description():
         launch_arguments={
             'sensor_hostname': LaunchConfiguration('sensor_hostname'),
             'udp_dest': LaunchConfiguration('udp_dest'),
+            'lidar_port': LaunchConfiguration('lidar_port'),
+            'imu_port': LaunchConfiguration('imu_port'),
             'timestamp_mode': 'TIME_FROM_INTERNAL_OSC',
-            'point_type': 'native',
+            'point_type': LaunchConfiguration('point_type'),
+            'udp_profile_lidar': LaunchConfiguration('udp_profile_lidar'),
             'viz': 'false',
         }.items(),
     )

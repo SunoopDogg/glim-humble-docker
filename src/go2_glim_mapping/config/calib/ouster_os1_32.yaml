@@ -1,9 +1,2 @@
-# Calibrated LiDAR->IMU extrinsic for GLIM (TUM [x, y, z, qx, qy, qz, qw]).
-# GLIM defines T_lidar_imu as the transform from the IMU frame to the LiDAR frame.
-#
-# This is a PLACEHOLDER (identity). Replace with the metadata-derived value:
-#   ros2 run go2_glim_mapping derive_extrinsic --metadata <ouster_metadata.json> \
-#       --frame os_lidar --out config/calib/ouster_os1_32.yaml
-# then VALIDATE with glim_ext libimu_validator.so before trusting it (see runbook M3).
-# Newer Ouster units typically need a 180-deg Z rotation -> qz~=1, qw~=0.
-T_lidar_imu: [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0]
+# Derived from 169.254.105-metadata.json (frame=os_lidar). VALIDATE with libimu_validator.
+T_lidar_imu: [-0.006253, 0.011775, -0.028534999999999998, 0.0, 0.0, 1.0, 0.0]

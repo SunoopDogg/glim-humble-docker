@@ -43,13 +43,30 @@ def rotation_to_quaternion(R):
     return q / np.linalg.norm(q)
 
 
+def _get_transform(metadata, key):
+    """Extract a 16-element transform list from metadata, handling nested format.
+
+    Supports both flat format (metadata[key]) and nested format introduced in
+    firmware 2.5.x (metadata['imu_intrinsics']['imu_to_sensor_transform'], etc.).
+    """
+    if key in metadata:
+        return metadata[key]
+    nested = {'imu_to_sensor_transform': ('imu_intrinsics', 'imu_to_sensor_transform'),
+              'lidar_to_sensor_transform': ('lidar_intrinsics', 'lidar_to_sensor_transform')}
+    if key in nested:
+        parent, child = nested[key]
+        if parent in metadata and child in metadata[parent]:
+            return metadata[parent][child]
+    raise KeyError(f"Transform key {key!r} not found in metadata (tried flat and nested format)")
+
+
 def compose_t_lidar_imu(metadata, frame='os_lidar'):
     """metadata dict (Ouster) -> GLIM T_lidar_imu as TUM list [x,y,z,qx,qy,qz,qw]."""
-    T_sensor_imu = _mat(metadata['imu_to_sensor_transform'])
+    T_sensor_imu = _mat(_get_transform(metadata, 'imu_to_sensor_transform'))
     if frame == 'os_sensor':
         T = T_sensor_imu
     elif frame == 'os_lidar':
-        T_sensor_lidar = _mat(metadata['lidar_to_sensor_transform'])
+        T_sensor_lidar = _mat(_get_transform(metadata, 'lidar_to_sensor_transform'))
         T = np.linalg.inv(T_sensor_lidar) @ T_sensor_imu
     else:
         raise ValueError(f"unknown frame {frame!r}; expected 'os_lidar' or 'os_sensor'")
