@@ -14,7 +14,7 @@ The environment is assembled in three layers that must be understood together:
 
 2. **`scripts/install-deps.sh`** runs *inside the container* and builds GLIM's native dependencies from source: **GTSAM 4.3a0**, **iridescence** (OpenGL viewer), and **gtsam_points** (built with `BUILD_WITH_CUDA=ON` — flip to `OFF` on machines without a GPU). It also `apt install`s system libs (boost, metis, fmt, spdlog, glm, glfw, OpenCV, ROS image_transport/cv_bridge). This is the slow, heavy step.
 
-3. **`src/glim`**, **`src/glim_ros2`** (SLAM core + ROS2 wrapper), **`src/ouster-ros`** (real Ouster ROS2 driver, `ros2` branch — used by `real_mapping.launch.py`) and **`src/unitree-go2-ros2`** (Go2 Gazebo model + CHAMP, from the locomotion spike — not used by the mapping pipeline) are **git submodules**, built with **colcon** alongside `src/go2_glim_mapping`. Submodules are empty until initialized.
+3. **`src/glim`**, **`src/glim_ros2`** (SLAM core + ROS2 wrapper), **`src/ouster-ros`** (real Ouster ROS2 driver, `ros2` branch), **`src/unitree-go2-ros2`** (Go2 Gazebo model + CHAMP — sim only, not in the mapping data path), and **`src/unitree_ros2`** (Go2 EDU DDS SDK — provides `unitree_api` messages used by `go2_bringup`) are **git submodules**, built with **colcon** alongside `src/go2_glim_mapping` and **`src/go2_bringup`** (ament_python, not a submodule — PS4 joystick + Go2 DDS bridge + `real_mapping` entry point). Submodules are empty until initialized.
 
 ### Python ↔ ROS2 bridge
 
@@ -52,9 +52,10 @@ docker compose up -d glim-humble-docker
 docker exec -it glim-humble-docker bash
 
 # --- inside the container ---
+apt-get install -y libzip-dev                 # required for ouster_ros (missing from install-deps.sh)
 bash scripts/install-deps.sh                  # build GTSAM / iridescence / gtsam_points (slow, one-time)
 source /opt/ros/humble/setup.bash
-# Jetson 권장 colcon 빌드 (unitree_go는 Foxy 전용 의존성으로 Humble에서 실패 → cascade abort 방지)
+# Recommended Jetson colcon build (unitree_go has Foxy-only dep → cascade-aborts glim/ouster_ros without --ignore)
 colcon build --packages-ignore unitree_go unitree_hg unitree_ros2_example \
     --cmake-args -DCMAKE_BUILD_TYPE=Release \
     --parallel-workers 4 --continue-on-error
@@ -63,6 +64,13 @@ bash scripts/link_ros_to_venv.sh              # uv sync + write ROS2 import brid
 
 # run go2_glim_mapping pure-logic unit tests (extrinsic/launch_config — no ROS needed, host or container)
 cd src/go2_glim_mapping && uv run --no-project --with numpy --with pyyaml --with pytest python -m pytest test/
+
+# Jetson real-hardware mapping session (M3 derive_extrinsic must be done first)
+sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0   # inside container
+ros2 launch go2_bringup robot_mapping.launch.py \
+    sensor_hostname:=<Ouster-IP> udp_dest:=<Jetson-eno1-IP> \
+    lidar_port:=7502 imu_port:=7503 udp_profile_lidar:=LEGACY
+# Save map (separate terminal): ros2 service call /map_saver/save_map std_srvs/srv/Trigger '{}'
 ```
 
 ## Gotchas
@@ -81,10 +89,10 @@ cd src/go2_glim_mapping && uv run --no-project --with numpy --with pyyaml --with
 - `ouster_ros` rosdeps (`ros-humble-pcl-conversions`, `libpcl-dev`, `libtins-dev`, `libpcap-dev`) are in `install-deps.sh`; if missing in a running container, `rosdep install --from-paths src/ouster-ros --ignore-src -r -y`.
 - Build the real Ouster driver with `colcon build --packages-up-to ouster_ros` (pulls the `ouster-sensor-msgs` dep; `--packages-select` alone misses it).
 - `ament_flake8` is NOT a passing gate here — committed code uses ~108-char lines (E501). Match existing style; don't reflow to 99.
-- **Jetson ufw가 Ouster UDP를 차단**: Jetson Ubuntu에 `ufw`가 기본 활성화 → 증상: `raw socket`은 패킷을 보지만 UDP 소켓 수신 0. 해결: `sudo ufw allow 7502/udp && sudo ufw allow 7503/udp`.
-- **rp_filter=2가 link-local Ouster 패킷을 드롭**: Ouster 연결 인터페이스(e.g. `eno1`)의 역방향 경로 검증이 link-local(`169.254.x.x`) UDP를 차단. 컨테이너 안(privileged)에서 `sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0` 필요. 재부팅 시 초기화되므로 launch 전 설정 권장.
-- **libzip-dev 누락으로 ouster_ros 빌드 실패**: `install-deps.sh`에 빠진 의존성 — `apt-get install -y libzip-dev` 후 재빌드.
-- **firmware 2.5.x 중첩 메타데이터**: `derive_extrinsic`에서 `KeyError: 'imu_to_sensor_transform'` 발생 시 → 펌웨어 2.5.x가 `imu_intrinsics.imu_to_sensor_transform` 중첩 형식 사용. `extrinsic.py`가 두 형식 모두 지원하도록 패치됨.
-- **ouster-ros 0.16.2 + firmware 2.5.x WINDOW 필드 crash**: `RNG19_RFL8_SIG16_NIR16` 프로파일 → `Field 'WINDOW' not found in LidarScan`으로 드라이버 crash. 해결: `real_mapping.launch.py`에 `udp_profile_lidar:=LEGACY` 전달.
-- **real_mapping.launch.py 확장 인자**: `lidar_port`(기본 0=auto), `imu_port`(기본 0=auto), `udp_profile_lidar`(기본 빈값=센서 기본값), `point_type`(기본 native) 추가됨. link-local 환경에서는 `udp_dest:=<Jetson eno1 IP> lidar_port:=7502 imu_port:=7503` 함께 사용 권장.
-- **go2_bringup 패키지**: `src/go2_bringup` (ament_python) — PS4 조이스틱 + unitree_ros2 DDS 브리지 + real_mapping 통합 진입점. `ros2 launch go2_bringup robot_mapping.launch.py sensor_hostname:=<host>`. `config/dds/cyclone_dds.xml`의 `NetworkInterfaceAddress`를 Go2 서브넷 인터페이스(`enx...`, 192.168.123.x)로 설정 필요.
+- **Jetson ufw blocks Ouster UDP**: ufw is active by default on Jetson Ubuntu — symptom: raw AF_PACKET socket sees packets but UDP socket receives 0. Fix: `sudo ufw allow 7502/udp && sudo ufw allow 7503/udp`.
+- **rp_filter=2 drops link-local Ouster packets**: reverse-path filter on the Ouster interface (`eno1`) rejects link-local (`169.254.x.x`) UDP before it reaches any socket. Fix inside privileged container: `sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0`. Resets on reboot — set at session start before launch.
+- **libzip-dev missing causes ouster_ros build failure**: not in `install-deps.sh` — `apt-get install -y libzip-dev` inside the container before building.
+- **firmware 2.5.x nested metadata format**: `derive_extrinsic` raises `KeyError: 'imu_to_sensor_transform'` because firmware 2.5.x wraps transforms under `imu_intrinsics.imu_to_sensor_transform`. `extrinsic.py` is patched to handle both flat and nested formats.
+- **ouster-ros 0.16.2 + firmware 2.5.x WINDOW field crash**: `RNG19_RFL8_SIG16_NIR16` profile causes `Field 'WINDOW' not found in LidarScan` — os_driver dies on activation. Fix: pass `udp_profile_lidar:=LEGACY` to `real_mapping.launch.py`.
+- **real_mapping.launch.py extended args**: `lidar_port` (default 0=auto), `imu_port` (default 0=auto), `udp_profile_lidar` (default empty=sensor default), `point_type` (default native). For link-local Ouster, always set `udp_dest:=<Jetson-eno1-IP> lidar_port:=7502 imu_port:=7503`.
+- **go2_bringup package**: `src/go2_bringup` (ament_python) — single entry point for PS4 joystick + Go2 DDS bridge + real_mapping. `config/dds/cyclone_dds.xml` `NetworkInterfaceAddress` must be set to the Go2 subnet interface (e.g. `enx...`, 192.168.123.x network).
