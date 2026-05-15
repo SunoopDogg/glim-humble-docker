@@ -11,3 +11,6 @@
 	path = src/ouster-ros
 	url = https://github.com/ouster-lidar/ouster-ros.git
 	branch = ros2
+[submodule "src/unitree_ros2"]
+	path = src/unitree_ros2
+	url = https://github.com/unitreerobotics/unitree_ros2
