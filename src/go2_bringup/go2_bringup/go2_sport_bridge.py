@@ -15,6 +15,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
+from std_srvs.srv import SetBool
 
 try:
     from unitree_api.msg import Request
@@ -66,21 +67,59 @@ class Go2SportBridge(Node):
                 'unitree_api not found — build with colcon first. '
                 'Node running but will not publish.'
             )
+        self.declare_parameter('enabled', False)
+        self.declare_parameter('max_vx', 0.3)
+        self.declare_parameter('max_vyaw', 0.5)
+        self.declare_parameter('cmd_timeout', 0.5)
+        self.enabled = self.get_parameter('enabled').value
+        self.max_vx = self.get_parameter('max_vx').value
+        self.max_vyaw = self.get_parameter('max_vyaw').value
+        self.cmd_timeout = self.get_parameter('cmd_timeout').value
+        self._last_cmd = self.get_clock().now()
+
         self._sub = self.create_subscription(Twist, '/cmd_vel', self._on_cmd_vel, 10)
         self._pub = (
             self.create_publisher(Request, SPORT_CMD_TOPIC, 10)
             if _HAS_UNITREE else None
         )
-        self.get_logger().info(f'go2_sport_bridge: /cmd_vel → {SPORT_CMD_TOPIC}')
+        self._enable_srv = self.create_service(SetBool, '~/enable', self._on_enable)
+        self._watchdog = self.create_timer(0.1, self._on_watchdog)
+        self.get_logger().info(
+            f'go2_sport_bridge: /cmd_vel → {SPORT_CMD_TOPIC} '
+            f'(enabled={self.enabled}, max_vx={self.max_vx}, max_vyaw={self.max_vyaw})'
+        )
 
-    def _on_cmd_vel(self, msg: Twist):
+    def _publish_move(self, vx: float, vyaw: float):
         if self._pub is None:
             return
-        params = twist_to_sport_params(msg.linear.x, msg.angular.z)
+        params = twist_to_sport_params(vx, vyaw)
         req = Request()
         req.header.identity.api_id = params['api_id']
         req.parameter = params['parameter']
         self._pub.publish(req)
+
+    def _on_cmd_vel(self, msg: Twist):
+        self._last_cmd = self.get_clock().now()
+        vx, vyaw = gated_velocity(
+            self.enabled, msg.linear.x, msg.angular.z, self.max_vx, self.max_vyaw
+        )
+        self._publish_move(vx, vyaw)
+
+    def _on_enable(self, request, response):
+        self.enabled = request.data
+        if not self.enabled:
+            self._publish_move(0.0, 0.0)  # active stop on disable
+        response.success = True
+        response.message = f'drive enabled={self.enabled}'
+        self.get_logger().info(response.message)
+        return response
+
+    def _on_watchdog(self):
+        if not self.enabled:
+            return
+        age = (self.get_clock().now() - self._last_cmd).nanoseconds * 1e-9
+        if age > self.cmd_timeout:
+            self._publish_move(0.0, 0.0)  # stop if cmd_vel stale (Nav2 silent/crashed)
 
 
 def main():
