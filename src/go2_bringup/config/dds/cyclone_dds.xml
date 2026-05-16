@@ -1,10 +1,19 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!-- CycloneDDS configuration for Go2 EDU communication over dedicated ethernet.
+
+     TWO interfaces are required:
+       - enx... (multicast=default): the NIC connected to the Go2 (192.168.123.x).
+         Multicast SPDP over this link is how the robot is discovered.
+       - lo (multicast=false) + <Peers><Peer address="localhost"/>: needed so that
+         ROS2 nodes on the SAME host discover each other. With only the enx interface,
+         every data socket binds to the enx address and localhost packets are never
+         looped back -> same-host nodes never see each other and `ros2` CLI hangs.
+         Adding lo + a localhost unicast peer fixes intra-host discovery.
+
      Modern <Interfaces> syntax: the deprecated <NetworkInterfaceAddress> element
-     breaks discovery on newer CycloneDDS (interface/multicast binding silently fails
-     -> same-host nodes never discover each other). Mirrors the known-working
-     unitree_ros2/cyclonedds_ws/src/cyclonedds.xml.
-     Set name= to the interface connected to Go2 (192.168.123.x subnet).
+     silently breaks interface/multicast binding on newer CycloneDDS.
+
+     Set the enx name= to the interface on the Go2 (192.168.123.x) subnet.
      Verify with: ip a   (look for the interface with a 192.168.123.x address)
      Common values: eth0, enp3s0, enx<mac> -->
 <CycloneDDS>
@@ -12,7 +21,14 @@
     <General>
       <Interfaces>
         <NetworkInterface name="enx32aababacca0" priority="default" multicast="default" />
+        <NetworkInterface name="lo" priority="default" multicast="false" />
       </Interfaces>
     </General>
+    <Discovery>
+      <ParticipantIndex>auto</ParticipantIndex>
+      <Peers>
+        <Peer address="localhost" />
+      </Peers>
+    </Discovery>
   </Domain>
 </CycloneDDS>

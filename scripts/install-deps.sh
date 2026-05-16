@@ -26,6 +26,12 @@ apt install -y --no-install-recommends \
     libtins-dev \
     libpcap-dev
 
+# Go2 EDU DDS bridge needs the CycloneDDS RMW (the image only ships cyclonedds-tools /
+# libcycloneddsidl — the DDS lib, NOT the ROS RMW). Without this the Go2 path silently
+# can't reach the robot (go2_sport_bridge publishes on fastrtps, Go2 listens on cyclonedds).
+apt install -y --no-install-recommends \
+    ros-humble-rmw-cyclonedds-cpp
+
 git clone https://github.com/borglab/gtsam
 cd gtsam && git checkout 4.3a0
 mkdir build && cd build
