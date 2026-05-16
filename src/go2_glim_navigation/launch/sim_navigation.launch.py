@@ -1,12 +1,13 @@
 """End-to-end sim test: headless Gazebo + diff-drive sensor rig + glim localization + Nav2.
 
-Reuses go2_glim_mapping's validated sim rig (room.world + sensor_bot.urdf) but runs
-navigation instead of mapping: glim localizes against a prebuilt sim GLIM map and
-Nav2 drives the rig to goals via /cmd_vel. Build the sim map first with
-go2_glim_mapping/sim_mapping.launch.py, then point map_path/costmap_yaml at it.
+Reuses go2_glim_mapping's validated sim rig (room.world + sensor_bot.urdf), which
+provides the base_link<->sensor TF. Runs navigation instead of mapping: rko_lio +
+icp_localization localize against a prebuilt sim .pcd map and Nav2 drives the rig to
+goals via /cmd_vel. Build the sim map first with go2_glim_mapping/sim_mapping.launch.py
+(it writes glim_map.pcd), then point map_pcd/costmap_yaml at it.
 
   ros2 launch go2_glim_navigation sim_navigation.launch.py \
-      map_path:=/tmp/sim_dump costmap_yaml:=/tmp/sim_costmap.yaml
+      map_pcd:=/tmp/sim_glim_map.pcd costmap_yaml:=/tmp/sim_costmap.yaml
 """
 import os
 
@@ -27,7 +28,7 @@ def generate_launch_description():
     args = [
         DeclareLaunchArgument('x', default_value='0.0', description='spawn x'),
         DeclareLaunchArgument('y', default_value='0.0', description='spawn y'),
-        DeclareLaunchArgument('map_path', description='Prebuilt sim GLIM dump dir'),
+        DeclareLaunchArgument('map_pcd', description='Prebuilt sim .pcd reference map'),
         DeclareLaunchArgument('costmap_yaml', description='Prebuilt sim 2D costmap (map_server yaml)'),
     ]
 
@@ -49,7 +50,7 @@ def generate_launch_description():
             'use_sim_time': 'true',
             'points_topic': '/points',
             'imu_topic': '/imu',
-            'map_path': LaunchConfiguration('map_path'),
+            'map_pcd': LaunchConfiguration('map_pcd'),
             'costmap_yaml': LaunchConfiguration('costmap_yaml'),
         }.items(),
     )

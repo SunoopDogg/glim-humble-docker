@@ -1,41 +1,37 @@
 import pytest
 import yaml
 
-from go2_glim_navigation.nav_config import prepare_nav2_params, validate_map_path
+from go2_glim_navigation.nav_config import prepare_nav2_params, validate_pcd_map
 
 
-def _make_dump(tmp_path):
-    """Minimal GLIM dump signature: graph.bin/.txt + values.bin + one numbered submap."""
-    (tmp_path / 'graph.bin').write_bytes(b'\x00')
-    (tmp_path / 'graph.txt').write_text('graph')
-    (tmp_path / 'values.bin').write_bytes(b'\x00')
-    submap = tmp_path / '000000'
-    submap.mkdir()
-    (submap / 'data.txt').write_text('submap')
-    return tmp_path
+def test_valid_pcd_returns_path(tmp_path):
+    f = tmp_path / 'glim_map.pcd'
+    f.write_text('# .PCD\n1 2 3\n')
+    assert validate_pcd_map(str(f)) == str(f)
 
 
-def test_valid_dump_returns_path(tmp_path):
-    d = _make_dump(tmp_path)
-    assert validate_map_path(str(d)) == str(d)
-
-
-def test_missing_dir_raises(tmp_path):
+def test_missing_pcd_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
-        validate_map_path(str(tmp_path / 'nope'))
+        validate_pcd_map(str(tmp_path / 'nope.pcd'))
 
 
-def test_dir_without_graph_raises(tmp_path):
-    (tmp_path / '000000').mkdir()
+def test_dir_raises(tmp_path):
+    with pytest.raises(IsADirectoryError):
+        validate_pcd_map(str(tmp_path))
+
+
+def test_non_pcd_extension_raises(tmp_path):
+    f = tmp_path / 'map.ply'
+    f.write_text('ply')
     with pytest.raises(ValueError):
-        validate_map_path(str(tmp_path))
+        validate_pcd_map(str(f))
 
 
-def test_file_instead_of_dir_raises(tmp_path):
-    f = tmp_path / 'x.pcd'
-    f.write_text('not a dir')
-    with pytest.raises(NotADirectoryError):
-        validate_map_path(str(f))
+def test_empty_pcd_raises(tmp_path):
+    f = tmp_path / 'empty.pcd'
+    f.write_bytes(b'')
+    with pytest.raises(ValueError):
+        validate_pcd_map(str(f))
 
 
 def _write_params(tmp_path):

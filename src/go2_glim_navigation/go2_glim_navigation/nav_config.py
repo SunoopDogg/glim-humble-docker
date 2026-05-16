@@ -8,22 +8,23 @@ testable without spinning up ROS.
 import os
 
 
-def validate_map_path(map_path):
-    """Return map_path if it is a GLIM dump dir, else raise a precise error.
+def validate_pcd_map(pcd_path):
+    """Return pcd_path if it is a non-empty .pcd file, else raise a precise error.
 
-    A GLIM dump has a graph file (graph.bin/graph.txt) at its root plus numbered
-    submap subdirs. Failing fast here surfaces the "must build a map first" gotcha
-    at launch instead of as an opaque GLIM crash.
+    icp_localization localizes against a .pcd reference map (pcd_filepath), and the
+    same file feeds the offline costmap export. GLIM already writes maps/glim_map.pcd,
+    so failing fast here surfaces a missing/empty map at launch instead of as an
+    opaque ICP crash.
     """
-    if not os.path.exists(map_path):
-        raise FileNotFoundError(f"map_path does not exist: {map_path}")
-    if not os.path.isdir(map_path):
-        raise NotADirectoryError(f"map_path must be a GLIM dump dir, not a file: {map_path}")
-    has_graph = any(os.path.exists(os.path.join(map_path, f))
-                    for f in ('graph.bin', 'graph.txt'))
-    if not has_graph:
-        raise ValueError(f"map_path is not a GLIM dump (no graph.bin/graph.txt): {map_path}")
-    return map_path
+    if not os.path.exists(pcd_path):
+        raise FileNotFoundError(f"pcd map does not exist: {pcd_path}")
+    if os.path.isdir(pcd_path):
+        raise IsADirectoryError(f"pcd map must be a .pcd file, not a dir: {pcd_path}")
+    if not pcd_path.endswith('.pcd'):
+        raise ValueError(f"pcd map must be a .pcd file: {pcd_path}")
+    if os.path.getsize(pcd_path) == 0:
+        raise ValueError(f"pcd map is empty: {pcd_path}")
+    return pcd_path
 
 
 def prepare_nav2_params(src_yaml, dst_yaml, use_sim_time, robot_radius=None):
