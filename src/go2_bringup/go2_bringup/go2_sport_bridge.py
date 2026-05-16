@@ -38,6 +38,14 @@ def twist_to_sport_params(linear_x: float, angular_z: float) -> dict:
     }
 
 
+def clamp_twist(linear_x: float, angular_z: float,
+                max_vx: float, max_vyaw: float) -> tuple:
+    """Clamp forward/yaw velocity to +/- caps. Pure — no ROS dependency."""
+    vx = max(-max_vx, min(max_vx, float(linear_x)))
+    vyaw = max(-max_vyaw, min(max_vyaw, float(angular_z)))
+    return vx, vyaw
+
+
 class Go2SportBridge(Node):
     def __init__(self):
         super().__init__('go2_sport_bridge')

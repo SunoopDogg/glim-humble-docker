@@ -40,3 +40,20 @@ def test_lateral_is_always_zero():
     p = twist_to_sport_params(linear_x=0.5, angular_z=0.3)
     params = json.loads(p['parameter'])
     assert params['y'] == 0.0
+
+
+from go2_bringup.go2_sport_bridge import clamp_twist
+
+
+def test_clamp_passthrough_within_caps():
+    assert clamp_twist(0.2, 0.3, max_vx=0.3, max_vyaw=0.5) == (0.2, 0.3)
+
+
+def test_clamp_limits_forward():
+    assert clamp_twist(1.5, 0.0, max_vx=0.3, max_vyaw=0.5) == (0.3, 0.0)
+
+
+def test_clamp_limits_reverse_and_yaw_sign():
+    vx, vyaw = clamp_twist(-1.5, -2.0, max_vx=0.3, max_vyaw=0.5)
+    assert vx == -0.3
+    assert vyaw == -0.5
