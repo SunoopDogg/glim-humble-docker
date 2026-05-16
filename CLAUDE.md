@@ -14,7 +14,7 @@ The environment is assembled in three layers that must be understood together:
 
 2. **`scripts/install-deps.sh`** runs *inside the container* and builds GLIM's native dependencies from source: **GTSAM 4.3a0**, **iridescence** (OpenGL viewer), and **gtsam_points** (built with `BUILD_WITH_CUDA=ON` — flip to `OFF` on machines without a GPU). It also `apt install`s system libs (boost, metis, fmt, spdlog, glm, glfw, OpenCV, ROS image_transport/cv_bridge). This is the slow, heavy step.
 
-3. **`src/glim`**, **`src/glim_ros2`** (SLAM core + ROS2 wrapper), **`src/ouster-ros`** (real Ouster ROS2 driver, `ros2` branch), **`src/unitree-go2-ros2`** (Go2 Gazebo model + CHAMP — sim only, not in the mapping data path), and **`src/unitree_ros2`** (Go2 EDU DDS SDK — provides `unitree_api` messages used by `go2_bringup`) are **git submodules**, built with **colcon** alongside `src/go2_glim_mapping` and **`src/go2_bringup`** (ament_python, not a submodule — PS4 joystick + Go2 DDS bridge + `real_mapping` entry point). Submodules are empty until initialized.
+3. **`src/glim`**, **`src/glim_ros2`** (SLAM core + ROS2 wrapper), **`src/ouster-ros`** (real Ouster ROS2 driver, `ros2` branch), **`src/unitree-go2-ros2`** (Go2 Gazebo model + CHAMP — sim only, not in the mapping data path), **`src/unitree_ros2`** (Go2 EDU DDS SDK — provides `unitree_api` messages used by `go2_bringup`), and **`src/icp_localization_ros2`** (prior-map ICP localizer for navigation) are **git submodules**, built with **colcon** alongside `src/go2_glim_mapping`, `src/go2_glim_navigation`, and **`src/go2_bringup`** (ament_python, not submodules — PS4 joystick + Go2 DDS bridge + `real_mapping` entry point). Submodules are empty until initialized.
 
 ### Python ↔ ROS2 bridge
 
@@ -83,7 +83,7 @@ ros2 launch go2_bringup robot_mapping.launch.py \
 
 ## Gotchas
 
-- The four submodules (`src/glim`, `src/glim_ros2`, `src/ouster-ros`, `src/unitree-go2-ros2`) are **empty checkouts** until `git submodule update --init --recursive` is run. Build commands fail silently-ish without this.
+- The git submodules (`.gitmodules`: `src/glim`, `src/glim_ros2`, `src/ouster-ros`, `src/unitree-go2-ros2`, `src/unitree_ros2`, `src/icp_localization_ros2`) are **empty checkouts** until `git submodule update --init --recursive` is run. Build commands fail silently-ish without this.
 - `gtsam_points` defaults to `BUILD_WITH_CUDA=ON` in `install-deps.sh`. On a GPU-less machine you must edit that flag to `OFF` or the build fails.
 - The GLIM real-time viewer needs working X11 forwarding — the compose files already mount `/tmp/.X11-unix` and set `DISPLAY`; the host must allow X connections (`xhost +local:`).
 - GLIM's ROS2 node is named **`glim_ros`** (NOT the `glim_rosnode` executable) → topics are `/glim_ros/{map,odom,...}`; `config_path`/`use_sim_time`/`dump_path` are params of node `glim_ros`.
