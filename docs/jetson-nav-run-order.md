@@ -89,8 +89,14 @@ ros2 launch go2_glim_navigation real_navigation.launch.py \
     map_pcd:=/root/glim-humble-docker/maps/glim_map.pcd \
     costmap_yaml:=/root/glim-humble-docker/maps/glim_costmap.yaml \
     lidar_frame:=os_sensor mount_xyz:="0.0 0.0 0.0" mount_rpy:="0.0 0.0 0.0"
-# NOTE: real_navigation bundles ouster+rko_lio+icp+nav2 — run THIS alone (not steps 2-5) for E2E.
-# Set /initialpose in RViz, then "Nav2 Goal". Ensure go2_bringup /cmd_vel bridge is up to move the robot.
+# NOTE: real_navigation bundles ouster+rko_lio+icp+nav2+go2_sport_bridge — run THIS alone (not steps 2-5) for E2E.
+# Set /initialpose in RViz, then "Nav2 Goal".
+# --- 8. enable real robot motion (N3) — robot must already be STANDING (sport mode) ---
+#   ping 192.168.123.x                       # GATE: Go2 reachable on its DDS subnet
+#   ros2 service call /go2_sport_bridge/enable std_srvs/srv/SetBool "{data: true}"
+#   # send a SMALL goal; robot moves. To stop: enable {data: false} (active stop), or Ctrl-C.
+#   # Caps: max_vx/max_vyaw launch args (default 0.3 m/s / 0.5 rad/s). Watchdog stops on
+#   # cmd_vel timeout. Whole stack runs on CycloneDDS (set by the launch).
 ```
 
 ## Known issues / risks
