@@ -57,3 +57,14 @@ def test_clamp_limits_reverse_and_yaw_sign():
     vx, vyaw = clamp_twist(-1.5, -2.0, max_vx=0.3, max_vyaw=0.5)
     assert vx == -0.3
     assert vyaw == -0.5
+
+
+from go2_bringup.go2_sport_bridge import gated_velocity
+
+
+def test_gate_disabled_forces_zero():
+    assert gated_velocity(False, 0.5, 0.4, max_vx=0.3, max_vyaw=0.5) == (0.0, 0.0)
+
+
+def test_gate_enabled_clamps():
+    assert gated_velocity(True, 1.5, 0.4, max_vx=0.3, max_vyaw=0.5) == (0.3, 0.4)

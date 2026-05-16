@@ -46,6 +46,18 @@ def clamp_twist(linear_x: float, angular_z: float,
     return vx, vyaw
 
 
+def gated_velocity(enabled: bool, linear_x: float, angular_z: float,
+                   max_vx: float, max_vyaw: float) -> tuple:
+    """Resolve the (vx, vyaw) to command: (0, 0) when disabled, else clamped.
+
+    Pure — encapsulates the full motion decision so the node stays thin and the
+    enable-gate is unit-testable without ROS.
+    """
+    if not enabled:
+        return 0.0, 0.0
+    return clamp_twist(linear_x, angular_z, max_vx, max_vyaw)
+
+
 class Go2SportBridge(Node):
     def __init__(self):
         super().__init__('go2_sport_bridge')
