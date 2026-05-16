@@ -20,13 +20,16 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable,
+)
 from launch.launch_description_sources import (
     AnyLaunchDescriptionSource,
     PythonLaunchDescriptionSource,
 )
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def _static_tf(context, *args, **kwargs):
@@ -54,6 +57,11 @@ def generate_launch_description():
         DeclareLaunchArgument('point_type', default_value='native',
                               description='native gives per-point t for deskew'),
         DeclareLaunchArgument('udp_profile_lidar', default_value=''),
+        DeclareLaunchArgument('timestamp_mode', default_value='TIME_FROM_ROS_TIME',
+                              description='Nav needs wall-clock cloud stamps so Nav2 costmaps can '
+                                          'look up base_link->map at the cloud header time. '
+                                          'INTERNAL_OSC (mapping default) is since-boot -> costmap '
+                                          'TF lookups fail with ~56yr extrapolation. Use PTP for both.'),
         DeclareLaunchArgument('map_pcd', description='Reference .pcd map for icp_localization'),
         DeclareLaunchArgument('costmap_yaml',
                               description='Offline-exported 2D costmap (map_server yaml)'),
@@ -63,6 +71,15 @@ def generate_launch_description():
                               description='base_link->lidar translation "x y z" (measure for your rig)'),
         DeclareLaunchArgument('mount_rpy', default_value='0.0 0.0 0.0',
                               description='base_link->lidar rotation "roll pitch yaw" rad'),
+        DeclareLaunchArgument('drive_enabled', default_value='false',
+                              description='Start the Go2 sport bridge ENABLED (default '
+                                          'false = safe; robot will not move until '
+                                          '`ros2 service call /go2_sport_bridge/enable '
+                                          'std_srvs/srv/SetBool "{data: true}"`).'),
+        DeclareLaunchArgument('max_vx', default_value='0.3',
+                              description='Forward velocity cap (m/s) applied to Nav2 cmd_vel.'),
+        DeclareLaunchArgument('max_vyaw', default_value='0.5',
+                              description='Yaw velocity cap (rad/s) applied to Nav2 cmd_vel.'),
     ]
 
     ouster = IncludeLaunchDescription(
@@ -72,7 +89,7 @@ def generate_launch_description():
             'udp_dest': LaunchConfiguration('udp_dest'),
             'lidar_port': LaunchConfiguration('lidar_port'),
             'imu_port': LaunchConfiguration('imu_port'),
-            'timestamp_mode': 'TIME_FROM_INTERNAL_OSC',
+            'timestamp_mode': LaunchConfiguration('timestamp_mode'),
             'point_type': LaunchConfiguration('point_type'),
             'udp_profile_lidar': LaunchConfiguration('udp_profile_lidar'),
             'viz': 'false',
@@ -90,4 +107,29 @@ def generate_launch_description():
         }.items(),
     )
 
-    return LaunchDescription(args + [ouster, OpaqueFunction(function=_static_tf), navigation])
+    go2_share = get_package_share_directory('go2_bringup')
+    dds_xml = os.path.join(go2_share, 'config', 'dds', 'cyclone_dds.xml')
+
+    # Whole stack on ONE RMW: the bridge must both receive Nav2 /cmd_vel and reach the
+    # Go2 (Unitree SDK = CycloneDDS). ROS2 does not interoperate across RMW vendors, so
+    # force rmw_cyclonedds_cpp + the Go2 DDS config for every node launched below.
+    set_rmw = SetEnvironmentVariable('RMW_IMPLEMENTATION', 'rmw_cyclonedds_cpp')
+    set_dds = SetEnvironmentVariable('CYCLONEDDS_URI', dds_xml)
+
+    sport_bridge = Node(
+        package='go2_bringup', executable='go2_sport_bridge', name='go2_sport_bridge',
+        output='screen',
+        parameters=[{
+            # value_type casts the launch-arg STRING to the right type. Without it, the
+            # string "false" is truthy and the gate would default OPEN (cf. the nav2
+            # slam:='false' footgun in CLAUDE.md).
+            'enabled': ParameterValue(LaunchConfiguration('drive_enabled'), value_type=bool),
+            'max_vx': ParameterValue(LaunchConfiguration('max_vx'), value_type=float),
+            'max_vyaw': ParameterValue(LaunchConfiguration('max_vyaw'), value_type=float),
+        }],
+    )
+
+    return LaunchDescription(
+        [set_rmw, set_dds] + args
+        + [ouster, OpaqueFunction(function=_static_tf), navigation, sport_bridge]
+    )
