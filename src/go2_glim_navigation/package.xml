@@ -11,7 +11,6 @@
   <exec_depend>go2_glim_mapping</exec_depend>
   <exec_depend>rko_lio</exec_depend>
   <exec_depend>icp_localization_ros2</exec_depend>
-  <exec_depend>pointcloud_to_grid</exec_depend>
   <exec_depend>nav2_bringup</exec_depend>
   <exec_depend>nav2_map_server</exec_depend>
   <exec_depend>spatio_temporal_voxel_layer</exec_depend>

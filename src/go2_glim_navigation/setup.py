@@ -35,6 +35,8 @@ setup(
     license='Apache-2.0',
     extras_require={'test': ['pytest']},
     entry_points={
-        'console_scripts': [],
+        'console_scripts': [
+            'pcd_to_costmap = go2_glim_navigation.pcd_costmap:main',
+        ],
     },
 )

@@ -17,6 +17,3 @@
 [submodule "src/icp_localization_ros2"]
 	path = src/icp_localization_ros2
 	url = https://github.com/baiyeweiguang/icp_localization_ros2
-[submodule "src/pointcloud_to_grid"]
-	path = src/pointcloud_to_grid
-	url = https://github.com/jkk-research/pointcloud_to_grid
