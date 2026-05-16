@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A **Docker harness** for building and running [GLIM](https://github.com/koide3/glim) (a GPU-accelerated 3D LiDAR SLAM framework by koide3) on **ROS2 Humble**. The target deployment is robot navigation on a **Unitree Go2** quadruped using an **Ouster** LiDAR for perception. It is the reproducible build/run environment plus the GLIM source pulled in as submodules, plus `src/go2_glim_mapping` (the mapping application — see "Mapping package").
+A **Docker harness** for building and running [GLIM](https://github.com/koide3/glim) (a GPU-accelerated 3D LiDAR SLAM framework by koide3) on **ROS2 Humble**. The target deployment is robot navigation on a **Unitree Go2** quadruped using an **Ouster** LiDAR for perception. It is the reproducible build/run environment plus the GLIM source pulled in as submodules, plus `src/go2_glim_mapping` (the mapping application — see "Mapping package") and `src/go2_glim_navigation` (Nav2 autonomous navigation on the built map — see "Navigation package").
 
 ## Architecture (the big picture)
 
@@ -35,6 +35,14 @@ ament_python orchestration around `glim_ros` (launch + GLIM config + map save). 
 - Sim E2E (headless): `ros2 launch go2_glim_mapping sim_mapping.launch.py` (`+ viewer:=true` for the GLIM Iridescence GUI). Drive with `ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.25}}"`.
 - Real Ouster (one-shot driver + mapping): `ros2 launch go2_glim_mapping real_mapping.launch.py sensor_hostname:=os1-xxxx.local` (Ouster internal IMU, `profile:=real`). Or point mapping at an existing source: `mapping.launch.py points_topic:=/ouster/points imu_topic:=/ouster/imu use_sim_time:=false`.
 - Map out → bind-mounted `maps/` (`glim_map.{ply,pcd}` + `dump/`); trigger via `/map_saver/save_map` (std_srvs/Trigger) or Ctrl-C. **Must drive first** — `/glim_ros/map` only publishes after a submap finalizes (tune `max_num_keyframes` in `config_sub_mapping_*.json`).
+
+## Navigation package (`go2_glim_navigation`)
+
+Nav2 autonomous goal navigation inside the prebuilt GLIM map. **Decoupled localizer (Approach B)** — the `glim_localization` fork was rejected (its pkg `glim_ros` collides with the submodules AND it is GLIM 1.0.4 vs repo's 1.2.1, downgrading mapping). Stack: **rko_lio** (apt `ros-humble-rko-lio`, `odom→base_link`) + **icp_localization_ros2** (submodule, scan-to-`.pcd` `map→odom`, eats `maps/glim_map.pcd` directly) + **`pcd_to_costmap`** (offline static OccupancyGrid) + Nav2 (Smac Hybrid-A* + RPP + STVL).
+- Real E2E: `ros2 launch go2_glim_navigation real_navigation.launch.py sensor_hostname:=os1-xxxx.local map_pcd:=maps/glim_map.pcd costmap_yaml:=maps/glim_costmap.yaml` (measure `mount_xyz`/`mount_rpy`/`lidar_frame` for the base_link→lidar static TF).
+- Static costmap: `ros2 run go2_glim_navigation pcd_to_costmap --pcd maps/glim_map.pcd --out maps/glim_costmap --z-min 0.0 --z-max 1.5` (regenerate after remapping; `maps/` is gitignored).
+- Phase 3 hardware runbook: `docs/jetson-phase3-nav-handoff.md`. Pure-logic tests: same uv command from `src/go2_glim_navigation`.
+- **base_link is required for nav** (mapping deferred it): `real_navigation.launch.py` publishes `base_link→<lidar_frame>` static TF; icp's `calibration.odometry_source_to_range_sensor` MUST equal that same base_link→lidar mount (identity only ok for sim). TF tree: `map→odom` (icp) + `odom→base_link` (rko_lio).
 
 ## Commands
 
@@ -99,3 +107,6 @@ ros2 launch go2_bringup robot_mapping.launch.py \
 - **ros-humble-joy missing from image**: `joy_node` and `teleop_twist_joy` not pre-installed — `apt-get install -y ros-humble-joy ros-humble-teleop-twist-joy` inside container before first `robot_mapping.launch.py` run.
 - **Stale os_driver intercepts IMU UDP**: if a previous launch was killed without cleanup, the old `os_driver` process keeps binding to port 7503 and steals IMU packets — new launch gets `num_imu=0` on all LiDAR frames. Symptom: `/ouster/imu` has publisher count=1 but zero messages. Fix: `pkill -f os_driver` (and `pkill -f glim_rosnode`) before restarting launch. Check with `ps aux | grep os_driver | grep -v grep | wc -l` — must be 1.
 - **GLIM odom stuck at ~0 despite robot moving**: if `/glim_ros/odom` position stays near origin after robot motion, check `ps aux | grep os_driver | wc -l` first — stale os_driver is the common cause (IMU deprivation breaks scan matching initialization).
+- **rko_lio: run the node, not its launch** — use `Node(executable='online_node')` / `ros2 run rko_lio online_node`, NOT `odometry.launch.py`. That launch only honors args present in the raw CLI `context.argv` (`name:=value`), so `IncludeLaunchDescription(launch_arguments=...)` silently fails its required-param check ("missing required parameter(s): imu_topic, lidar_topic, base_frame"). No `publish_tf` knob (always broadcasts `odom→base_link`).
+- **nav2 bringup: never pass `slam:='false'` (lowercase)** — nav2 evaluates `IfCondition(PythonExpression(['not ', slam]))` → `NameError: name 'false' is not defined`. Omit `slam` (default `'False'` = localization mode) or pass capitalized `'False'`.
+- **icp_localization_ros2 builds with apt `ros-humble-libpointmatcher` alone** — no separate `pointmatcher_ros` despite its package.xml dep. Nav apt deps: `ros-humble-{navigation2,nav2-bringup,spatio-temporal-voxel-layer,libpointmatcher,grid-map-msgs}`. Its TF frames are hardcoded (`map`/`odom`/`odom_source`/`range_sensor`) and config is via `node_params.yaml` (its `bringup.launch.py` takes no args) — patch the params file, don't pass launch args.
