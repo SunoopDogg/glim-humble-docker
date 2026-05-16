@@ -55,3 +55,32 @@ def prepare_nav2_params(src_yaml, dst_yaml, use_sim_time, robot_radius=None):
     with open(dst_yaml, 'w') as f:
         yaml.safe_dump(data, f)
     return dst_yaml
+
+
+def prepare_icp_params(src_yaml, dst_yaml, pcd_path, points_topic, imu_topic,
+                       odom_topic, input_filters_path):
+    """Copy the icp_localization node_params yaml -> dst, patch the prior map, input
+    filters, and the live topics; return dst_yaml. Never mutates src_yaml.
+
+    icp_localization is configured by a params file (its bringup.launch.py takes no
+    args), so the committed config is patched into a temp copy at launch — same
+    temp-patch pattern as prepare_config/prepare_nav2_params. ICP/calibration tuning
+    stays in the committed config; only deployment-specific keys are overridden.
+    """
+    import yaml
+
+    with open(src_yaml) as f:
+        data = yaml.safe_load(f)
+
+    params = data['/icp_localization']['ros__parameters']
+    params['pcd_file_path'] = pcd_path
+    params['input_filters_config_path'] = input_filters_path
+    inner = params['icp_localization_ros2']
+    inner['range_data_topic'] = points_topic
+    inner['imu_data_topic'] = imu_topic
+    inner['odometry_data_topic'] = odom_topic
+
+    os.makedirs(os.path.dirname(dst_yaml), exist_ok=True)
+    with open(dst_yaml, 'w') as f:
+        yaml.safe_dump(data, f)
+    return dst_yaml
