@@ -1,13 +1,18 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!-- CycloneDDS configuration for Go2 EDU communication over dedicated ethernet.
-     NetworkInterfaceAddress: set to the interface connected to Go2 (192.168.123.x subnet).
-     Verify with: ip a   (look for the interface with 192.168.123.x address)
+     Modern <Interfaces> syntax: the deprecated <NetworkInterfaceAddress> element
+     breaks discovery on newer CycloneDDS (interface/multicast binding silently fails
+     -> same-host nodes never discover each other). Mirrors the known-working
+     unitree_ros2/cyclonedds_ws/src/cyclonedds.xml.
+     Set name= to the interface connected to Go2 (192.168.123.x subnet).
+     Verify with: ip a   (look for the interface with a 192.168.123.x address)
      Common values: eth0, enp3s0, enx<mac> -->
 <CycloneDDS>
-  <Domain id="0">
+  <Domain Id="any">
     <General>
-      <NetworkInterfaceAddress>enx32aababacca0</NetworkInterfaceAddress>
-      <AllowMulticast>true</AllowMulticast>
+      <Interfaces>
+        <NetworkInterface name="enx32aababacca0" priority="default" multicast="default" />
+      </Interfaces>
     </General>
   </Domain>
 </CycloneDDS>
