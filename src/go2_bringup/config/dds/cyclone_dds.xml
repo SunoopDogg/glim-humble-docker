@@ -1,34 +1,43 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <!-- CycloneDDS configuration for Go2 EDU communication over dedicated ethernet.
 
-     TWO interfaces are required:
-       - enx... (multicast=default): the NIC connected to the Go2 (192.168.123.x).
-         Multicast SPDP over this link is how the robot is discovered.
-       - lo (multicast=false) + <Peers><Peer address="localhost"/>: needed so that
-         ROS2 nodes on the SAME host discover each other. With only the enx interface,
-         every data socket binds to the enx address and localhost packets are never
-         looped back -> same-host nodes never see each other and `ros2` CLI hangs.
-         Adding lo + a localhost unicast peer fixes intra-host discovery.
+     SINGLE robot-facing interface ONLY. This matches the official Unitree
+     unitree_ros2/setup.sh verbatim (single <NetworkInterface name="enpXXX"
+     multicast="default"/>, NO lo, NO Peers, NO ParticipantIndex) and two
+     known-good community Go2 stacks (autonomy_stack_go2, go2_rl_ws), all of
+     which run full multi-node stacks SAME-HOST on a single enx interface.
+
+     HISTORY: a prior config (commit 72dfabb) added a second `lo` interface +
+     a localhost <Peer> to "fix same-host discovery". Deep research (2026-06-16,
+     3-0 verified vs official setup.sh) found that multi-homed lo+enx binding is
+     the ROOT CAUSE of the Go2 never being discovered (0 subs on
+     /api/sport/request, `ddsi_udp_conn_write ... retcode -3` when a Go2 unicast
+     peer was added). Single-enx is the fix. The original same-host diagnosis was
+     made with a fake subscriber + the `ros2` CLI that hangs under cyclonedds
+     regardless — not a valid test. Verify same-host with demo talker/listener.
 
      Modern <Interfaces> syntax: the deprecated <NetworkInterfaceAddress> element
      silently breaks interface/multicast binding on newer CycloneDDS.
 
-     Set the enx name= to the interface on the Go2 (192.168.123.x) subnet.
-     Verify with: ip a   (look for the interface with a 192.168.123.x address)
-     Common values: eth0, enp3s0, enx<mac> -->
+     name= is the onboard NIC on the Go2 (192.168.123.x) subnet. Default eno1
+     (proven topology, this Jetson). Do NOT use the USB-eth adapter enx<mac>: it
+     delivers 0 inbound multicast, so the Go2 is never discovered — see
+     docs/go2-drive-activation-design.md. Verify with: ip a
+
+     STAGED FALLBACK (only if single-enx multicast does not discover the Go2,
+     and ONLY after confirming same-host talker/listener works):
+       1. multicast group-join on a USB-eth adapter can fail even though tcpdump
+          sees the Go2 SPDP multicast (tcpdump does not join the IGMP group).
+       2. If so, add unicast discovery WITHOUT re-adding lo:
+            <Discovery><Peers><Peer address="192.168.123.161"/></Peers></Discovery>
+          (AllowMulticast=spdp will NOT help — spdp still discovers via multicast.)
+       Re-test reading /sportmodestate before any motion. -->
 <CycloneDDS>
   <Domain Id="any">
     <General>
       <Interfaces>
-        <NetworkInterface name="enx32aababacca0" priority="default" multicast="default" />
-        <NetworkInterface name="lo" priority="default" multicast="false" />
+        <NetworkInterface name="eno1" priority="default" multicast="default" />
       </Interfaces>
     </General>
-    <Discovery>
-      <ParticipantIndex>auto</ParticipantIndex>
-      <Peers>
-        <Peer address="localhost" />
-      </Peers>
-    </Discovery>
   </Domain>
 </CycloneDDS>
