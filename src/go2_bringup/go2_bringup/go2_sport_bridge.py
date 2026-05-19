@@ -26,6 +26,30 @@ except ImportError:  # pragma: no cover — only missing before colcon build
 SPORT_CMD_TOPIC = '/api/sport/request'
 ROBOT_SPORT_API_ID_MOVE = 1008
 
+# Sport mode-string → api_id. Mirrors ~/ros2_ws go2_driver::handleMode + go2_api_id.hpp.
+# Mode requests carry NO JSON parameter (unlike MOVE) — parameter is always ''.
+ROBOT_SPORT_MODE_API_ID = {
+    'damp': 1001,
+    'balance_stand': 1002,
+    'stop_move': 1003,
+    'stand_up': 1004,
+    'stand_down': 1005,
+    'recovery_stand': 1006,
+}
+
+
+def mode_to_sport_request(mode: str):
+    """Map a sport mode-string to a unitree_api/Request payload.
+
+    Pure — no ROS dependency. Returns {'api_id': int, 'parameter': ''} for a known
+    mode, or None for an unknown one (caller logs + ignores). Mode requests have an
+    empty parameter; only MOVE carries the {x,y,z} JSON.
+    """
+    api_id = ROBOT_SPORT_MODE_API_ID.get(mode)
+    if api_id is None:
+        return None
+    return {'api_id': api_id, 'parameter': ''}
+
 
 def twist_to_sport_params(linear_x: float, angular_z: float) -> dict:
     """Convert Twist velocity scalars to unitree_api/Request field values.

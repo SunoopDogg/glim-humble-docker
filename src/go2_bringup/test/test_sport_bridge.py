@@ -68,3 +68,39 @@ def test_gate_disabled_forces_zero():
 
 def test_gate_enabled_clamps():
     assert gated_velocity(True, 1.5, 0.4, max_vx=0.3, max_vyaw=0.5) == (0.3, 0.4)
+
+
+from go2_bringup.go2_sport_bridge import mode_to_sport_request
+
+
+def test_stand_up_maps_to_1004_empty_param():
+    p = mode_to_sport_request('stand_up')
+    assert p['api_id'] == 1004
+    assert p['parameter'] == ''
+
+
+def test_balance_stand_maps_to_1002():
+    assert mode_to_sport_request('balance_stand')['api_id'] == 1002
+
+
+def test_stop_move_maps_to_1003():
+    assert mode_to_sport_request('stop_move')['api_id'] == 1003
+
+
+def test_damp_maps_to_1001():
+    assert mode_to_sport_request('damp')['api_id'] == 1001
+
+
+def test_mode_param_is_always_empty():
+    for mode in ('stand_up', 'balance_stand', 'stop_move', 'damp'):
+        assert mode_to_sport_request(mode)['parameter'] == ''
+
+
+def test_unknown_mode_returns_none():
+    assert mode_to_sport_request('moonwalk') is None
+
+
+def test_mode_is_whitespace_tolerant():
+    # caller strips, but the map itself uses exact keys; verify exact-key behavior
+    assert mode_to_sport_request('stand_up') is not None
+    assert mode_to_sport_request('stand up') is None
