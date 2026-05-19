@@ -15,6 +15,7 @@ import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from geometry_msgs.msg import Twist
+from std_msgs.msg import String
 from std_srvs.srv import SetBool
 
 try:
@@ -107,20 +108,24 @@ class Go2SportBridge(Node):
             if _HAS_UNITREE else None
         )
         self._enable_srv = self.create_service(SetBool, '~/enable', self._on_enable)
+        self._mode_sub = self.create_subscription(String, '~/mode', self._on_mode, 10)
         self._watchdog = self.create_timer(0.1, self._on_watchdog)
         self.get_logger().info(
             f'go2_sport_bridge: /cmd_vel → {SPORT_CMD_TOPIC} '
             f'(enabled={self.enabled}, max_vx={self.max_vx}, max_vyaw={self.max_vyaw})'
         )
 
-    def _publish_move(self, vx: float, vyaw: float):
+    def _publish_request(self, api_id: int, parameter: str):
         if self._pub is None:
             return
-        params = twist_to_sport_params(vx, vyaw)
         req = Request()
-        req.header.identity.api_id = params['api_id']
-        req.parameter = params['parameter']
+        req.header.identity.api_id = api_id
+        req.parameter = parameter
         self._pub.publish(req)
+
+    def _publish_move(self, vx: float, vyaw: float):
+        params = twist_to_sport_params(vx, vyaw)
+        self._publish_request(params['api_id'], params['parameter'])
 
     def _on_cmd_vel(self, msg: Twist):
         self._last_cmd = self.get_clock().now()
@@ -137,6 +142,20 @@ class Go2SportBridge(Node):
         response.message = f'drive enabled={self.enabled}'
         self.get_logger().info(response.message)
         return response
+
+    def _on_mode(self, msg: String):
+        # Sport mode (stand_up/balance_stand/stop_move/damp) — operator pre-flight.
+        # Intentionally NOT gated by ~/enable: the robot must be stood up BEFORE
+        # drive is enabled. stand_up/recovery_stand DO move the robot — operator
+        # command only, with clear space + e-stop ready.
+        payload = mode_to_sport_request(msg.data.strip())
+        if payload is None:
+            self.get_logger().warn(f'unknown sport mode: {msg.data!r}')
+            return
+        self.get_logger().info(
+            f'sport mode → {msg.data.strip()} (api_id {payload["api_id"]})'
+        )
+        self._publish_request(payload['api_id'], payload['parameter'])
 
     def _on_watchdog(self):
         if not self.enabled:
