@@ -3,20 +3,24 @@
 
      TWO interfaces: onboard eno1 (PRIMARY, Go2-facing) + lo (same-host loopback).
 
-     WHY lo is required here (empirical, 2026-06-16, verified in-container):
-       This Jetson's physical NIC does NOT loop multicast back to other local
-       participants (self-loopback broken — see memory go2-dds-multicast-blocker).
-       So a single-physical-interface bind (eno1 only) makes SAME-HOST DDS discovery
-       fail: a demo pub/echo on cyclonedds heard 0/12 msgs with eno1-only, 12/12 once
-       `lo` was added. Same-host discovery is mandatory — the whole nav stack (nav2
-       <-> costmaps <-> rko_lio <-> icp <-> go2_sport_bridge) and the operator's
+     WHY lo is required here (EMPIRICAL, 2026-06-16, verified in-container; mechanism
+     NOT isolated — state the fix, not a guessed cause):
+       Binding eno1 ONLY makes SAME-HOST DDS discovery fail on this host: a demo
+       pub/echo on cyclonedds heard 0/12 msgs eno1-only, 12/12 once `lo` was added,
+       and the go2_sport_bridge enable round-trip hangs eno1-only but succeeds with
+       lo+eno1. (Do NOT assert "self-loopback broken" — cyclonedds logs `lo not
+       multicast-capable: disabling multicast` yet same-host works, so the cause is
+       elsewhere.) Same-host discovery is mandatory — the whole nav stack (nav2 <->
+       costmaps <-> rko_lio <-> icp <-> go2_sport_bridge) and the operator's
        `ros2 service call .../enable` all rely on it. eno1-only silently breaks them.
 
      WHY eno1 is PRIMARY (priority 10 > lo's 1):
-       The external Go2 must reach us on our 192.168.123.x locator, so the onboard
-       NIC's address is advertised as the preferred unicast locator. eno1 also
-       delivers the Go2's INBOUND multicast (the USB-eth adapter enx<mac> does NOT —
-       0 inbound multicast; never use it). See docs/go2-drive-activation-design.md.
+       The external Go2 must reach us on our 192.168.123.x locator. Verified via
+       cyclonedds trace: `ownip: udp/192.168.123.222, udp/127.0.0.1` — it advertises
+       the Go2-subnet address (NOT the Ouster 192.168.2.1 that also lives on eno1),
+       so the Go2 at .161 can route back. eno1 also delivers the Go2's INBOUND
+       multicast (the USB-eth adapter enx<mac> does NOT — 0 inbound multicast; never
+       use it). See docs/go2-drive-activation-design.md.
 
      HISTORY / correction: a prior conclusion (xml comment + commit 92b6158) was
      "single interface, NO lo, NO Peers", derived against the enx adapter — whose
