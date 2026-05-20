@@ -1,42 +1,46 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<!-- CycloneDDS configuration for Go2 EDU communication over dedicated ethernet.
+<!-- CycloneDDS configuration for Go2 EDU + same-host ROS 2 nav stack on this Jetson.
 
-     SINGLE robot-facing interface ONLY. This matches the official Unitree
-     unitree_ros2/setup.sh verbatim (single <NetworkInterface name="enpXXX"
-     multicast="default"/>, NO lo, NO Peers, NO ParticipantIndex) and two
-     known-good community Go2 stacks (autonomy_stack_go2, go2_rl_ws), all of
-     which run full multi-node stacks SAME-HOST on a single enx interface.
+     TWO interfaces: onboard eno1 (PRIMARY, Go2-facing) + lo (same-host loopback).
 
-     HISTORY: a prior config (commit 72dfabb) added a second `lo` interface +
-     a localhost <Peer> to "fix same-host discovery". Deep research (2026-06-16,
-     3-0 verified vs official setup.sh) found that multi-homed lo+enx binding is
-     the ROOT CAUSE of the Go2 never being discovered (0 subs on
-     /api/sport/request, `ddsi_udp_conn_write ... retcode -3` when a Go2 unicast
-     peer was added). Single-enx is the fix. The original same-host diagnosis was
-     made with a fake subscriber + the `ros2` CLI that hangs under cyclonedds
-     regardless — not a valid test. Verify same-host with demo talker/listener.
+     WHY lo is required here (empirical, 2026-06-16, verified in-container):
+       This Jetson's physical NIC does NOT loop multicast back to other local
+       participants (self-loopback broken — see memory go2-dds-multicast-blocker).
+       So a single-physical-interface bind (eno1 only) makes SAME-HOST DDS discovery
+       fail: a demo pub/echo on cyclonedds heard 0/12 msgs with eno1-only, 12/12 once
+       `lo` was added. Same-host discovery is mandatory — the whole nav stack (nav2
+       <-> costmaps <-> rko_lio <-> icp <-> go2_sport_bridge) and the operator's
+       `ros2 service call .../enable` all rely on it. eno1-only silently breaks them.
 
-     Modern <Interfaces> syntax: the deprecated <NetworkInterfaceAddress> element
-     silently breaks interface/multicast binding on newer CycloneDDS.
+     WHY eno1 is PRIMARY (priority 10 > lo's 1):
+       The external Go2 must reach us on our 192.168.123.x locator, so the onboard
+       NIC's address is advertised as the preferred unicast locator. eno1 also
+       delivers the Go2's INBOUND multicast (the USB-eth adapter enx<mac> does NOT —
+       0 inbound multicast; never use it). See docs/go2-drive-activation-design.md.
 
-     name= is the onboard NIC on the Go2 (192.168.123.x) subnet. Default eno1
-     (proven topology, this Jetson). Do NOT use the USB-eth adapter enx<mac>: it
-     delivers 0 inbound multicast, so the Go2 is never discovered — see
-     docs/go2-drive-activation-design.md. Verify with: ip a
+     HISTORY / correction: a prior conclusion (xml comment + commit 92b6158) was
+     "single interface, NO lo, NO Peers", derived against the enx adapter — whose
+     self-loopback happened to work, so same-host did not need lo there. That does
+     NOT hold on eno1 (self-loopback broken). The earlier lo+enx failure (commit
+     72dfabb, retcode -3) was caused by adding a unicast <Peer>, not by lo itself;
+     this config has NO Peer. Modern <Interfaces> syntax (deprecated
+     <NetworkInterfaceAddress> silently breaks binding).
 
-     STAGED FALLBACK (only if single-enx multicast does not discover the Go2,
-     and ONLY after confirming same-host talker/listener works):
-       1. multicast group-join on a USB-eth adapter can fail even though tcpdump
-          sees the Go2 SPDP multicast (tcpdump does not join the IGMP group).
-       2. If so, add unicast discovery WITHOUT re-adding lo:
-            <Discovery><Peers><Peer address="192.168.123.161"/></Peers></Discovery>
-          (AllowMulticast=spdp will NOT help — spdp still discovers via multicast.)
-       Re-test reading /sportmodestate before any motion. -->
+     RESIDUAL UNKNOWN (hardware-gated): whether the Go2 WRITE path (us ->
+     /api/sport/request) works under lo+eno1 is unverified — the Go2 was not
+     connected when this was set. Validate with docs/jetson-nav-run-order.md gates:
+     /sportmodestate READ, then matched-sub on /api/sport/request, before motion.
+     If the Go2 is not discovered, try eno1-only TEMPORARILY to isolate (it will
+     break same-host but proves external reach), then restore lo+eno1.
+
+     name= the onboard NIC on the Go2 (192.168.123.x) subnet — default eno1. Verify
+     with: ip a   (NICs/IPs can reshuffle per power-cycle). -->
 <CycloneDDS>
   <Domain Id="any">
     <General>
       <Interfaces>
-        <NetworkInterface name="eno1" priority="default" multicast="default" />
+        <NetworkInterface name="eno1" priority="10" multicast="default" />
+        <NetworkInterface name="lo" priority="1" multicast="default" />
       </Interfaces>
     </General>
   </Domain>
