@@ -36,6 +36,7 @@ colcon build --packages-up-to icp_localization_ros2 go2_glim_navigation \
 ```bash
 # --- 1. network (host netns; run in container since it has `ip`) ---
 ip addr add 192.168.2.1/24 dev eno1            # match sensor subnet (skip if already present)
+bash scripts/net_setup_go2.sh                  # Go2 subnet on eno1 + mcast route + rp_filter
 sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0
 ping -c2 192.168.2.32                           # GATE: sensor replies
 
@@ -82,21 +83,27 @@ DISPLAY=:1 rviz2 -d maps/nav_check.rviz            # grey=prior_map, green=regis
 # GATE (N2 visual): green registered scan overlays grey prior map. If offset -> RViz
 #   "2D Pose Estimate" at the robot's true pose (icp does NOT auto-relocalize globally).
 
-# --- 7. Nav2 + goal (N3: FIRST ROBOT MOTION) ---
+# --- 7. Nav2 + goal (N3: FIRST ROBOT MOTION). Run real_navigation ALONE. ---
+# Do NOT also run steps 2-5: real_navigation bundles ouster+rko_lio+icp+nav2+go2_sport_bridge.
+# Double-launching Ouster causes the os_driver port-7503 collision + rko_lio cold-start race.
 ros2 launch go2_glim_navigation real_navigation.launch.py \
     sensor_hostname:=192.168.2.32 udp_dest:=192.168.2.1 lidar_port:=7502 imu_port:=7503 \
     udp_profile_lidar:=LEGACY \
     map_pcd:=/root/glim-humble-docker/maps/glim_map.pcd \
     costmap_yaml:=/root/glim-humble-docker/maps/glim_costmap.yaml \
     lidar_frame:=os_sensor mount_xyz:="0.0 0.0 0.0" mount_rpy:="0.0 0.0 0.0"
-# NOTE: real_navigation bundles ouster+rko_lio+icp+nav2+go2_sport_bridge — run THIS alone (not steps 2-5) for E2E.
 # Set /initialpose in RViz, then "Nav2 Goal".
-# --- 8. enable real robot motion (N3) — robot must already be STANDING (sport mode) ---
-#   ping 192.168.123.x                       # GATE: Go2 reachable on its DDS subnet
-#   ros2 service call /go2_sport_bridge/enable std_srvs/srv/SetBool "{data: true}"
-#   # send a SMALL goal; robot moves. To stop: enable {data: false} (active stop), or Ctrl-C.
-#   # Caps: max_vx/max_vyaw launch args (default 0.3 m/s / 0.5 rad/s). Watchdog stops on
-#   # cmd_vel timeout. Whole stack runs on CycloneDDS (set by the launch).
+
+# --- 8. enable real robot motion (N3) — Go2 must already be STANDING (sport mode) ---
+# In a SEPARATE operator shell, source the DDS env FIRST or the service is invisible
+# (cross-RMW -> "waiting for service to become available..." forever):
+source /opt/ros/humble/setup.bash && source install/setup.bash && source scripts/go2_env.sh
+ps aux | grep go2_sport_bridge | grep -v grep        # GATE: exactly one bridge process
+ros2 topic echo /sportmodestate                      # GATE: live Go2 telemetry (eno1 READ ok)
+ros2 service call /go2_sport_bridge/enable std_srvs/srv/SetBool "{data: true}"
+# send a SMALL goal; robot moves. Stop: enable {data: false} (active stop), or Ctrl-C.
+# Caps: max_vx/max_vyaw launch args (default 0.3 m/s / 0.5 rad/s). Watchdog stops on
+# cmd_vel timeout. Whole stack runs on CycloneDDS (set by the launch + go2_env.sh).
 ```
 
 ## Known issues / risks
