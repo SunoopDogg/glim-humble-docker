@@ -1,100 +1,173 @@
-"""Launch GLIM 3D mapping + map saver against configurable sensor topics.
+"""Unified GLIM mapping launch: bring up a sensor source by mode, run GLIM + map_saver.
 
-Runs glim_rosnode (ROS2 node name "glim_ros") with this package's GLIM config,
-remapping the configured input topics (/points, /imu) to the actual source
-topics, and a map_saver that writes the global map to PLY+PCD on shutdown or on
-the ~/save_map service.
+One entry point for all mapping. Pick the source with `mode`:
+  mode:=sim    headless Gazebo diff-drive rig (default) -> /points + /imu, sim profile
+  mode:=real   ouster-ros driver -> /ouster/points + /ouster/imu, real profile
+  mode:=topics no source; map an existing /points + /imu (another sim, a bag, ...)
 
-Args:
-  profile:=real  -> patch config_sensors.json (global_shutter_lidar=false +
-                    calibrated T_lidar_imu from calib_path) for real hardware.
-                    Default 'sim' uses the committed config unchanged.
-  viewer:=true   -> enable GLIM's Iridescence live map viewer (needs X11 + GL).
-                    The committed config stays headless; when true we copy it to
-                    a temp dir and add libstandard_viewer.so (no file duplication
-                    in the package).
+Name the map with `map_name` -> <maps_root>/<map_name>/glim_map.{ply,pcd}
+plus the GLIM factor-graph dump at <maps_root>/<map_name>/dump/. Each name is an
+isolated directory, so a new run never overwrites a differently-named map.
 
-Sim defaults match the validated diff-drive rig. For a real Ouster:
-  ros2 launch go2_glim_mapping mapping.launch.py \
-      points_topic:=/ouster/points imu_topic:=/ouster/imu use_sim_time:=false
-(and set T_lidar_imu in config/glim/config_sensors.json to your mounting).
+Examples:
+  ros2 launch go2_glim_mapping mapping.launch.py mode:=sim map_name:=room_a
+  ros2 launch go2_glim_mapping mapping.launch.py mode:=real map_name:=lab \\
+      sensor_hostname:=os1-xxxx.local udp_dest:=<host-IP> lidar_port:=7502 imu_port:=7503
+  ros2 launch go2_glim_mapping mapping.launch.py mode:=topics \\
+      points_topic:=/ouster/points imu_topic:=/ouster/imu
 """
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument,
+    ExecuteProcess,
+    IncludeLaunchDescription,
+    OpaqueFunction,
+)
+from launch.launch_description_sources import (
+    AnyLaunchDescriptionSource,
+    PythonLaunchDescriptionSource,
+)
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
-from go2_glim_mapping.launch_config import load_extrinsic_yaml, prepare_config
+from go2_glim_mapping.launch_config import (
+    load_extrinsic_yaml,
+    prepare_config,
+    resolve_map_paths,
+    resolve_mode,
+)
 
 
-def _effective_config_path(context):
-    """Resolve config_path, applying the launch profile (sim/real) and viewer patches."""
+def _source_actions(mode):
+    """Source-bringup actions for the chosen mode (sim: gazebo, real: ouster, topics: none)."""
+    pkg_share = get_package_share_directory('go2_glim_mapping')
+    if mode == 'sim':
+        world = os.path.join(pkg_share, 'sim', 'room.world')
+        urdf = os.path.join(pkg_share, 'sim', 'sensor_bot.urdf')
+        gzserver = ExecuteProcess(
+            cmd=['gzserver', '--verbose', world,
+                 '-s', 'libgazebo_ros_init.so', '-s', 'libgazebo_ros_factory.so'],
+            output='screen',
+        )
+        spawn = Node(
+            package='gazebo_ros', executable='spawn_entity.py', output='screen',
+            arguments=['-file', urdf, '-entity', 'sensor_bot',
+                       '-x', LaunchConfiguration('x'), '-y', LaunchConfiguration('y'), '-z', '0.2'],
+        )
+        return [gzserver, spawn]
+    if mode == 'real':
+        ouster_share = get_package_share_directory('ouster_ros')
+        ouster = IncludeLaunchDescription(
+            AnyLaunchDescriptionSource(
+                os.path.join(ouster_share, 'launch', 'sensor.launch.xml')),
+            launch_arguments={
+                'sensor_hostname': LaunchConfiguration('sensor_hostname'),
+                'udp_dest': LaunchConfiguration('udp_dest'),
+                'lidar_port': LaunchConfiguration('lidar_port'),
+                'imu_port': LaunchConfiguration('imu_port'),
+                'timestamp_mode': LaunchConfiguration('timestamp_mode'),
+                'point_type': LaunchConfiguration('point_type'),
+                'udp_profile_lidar': LaunchConfiguration('udp_profile_lidar'),
+                'viz': 'false',
+            }.items(),
+        )
+        return [ouster]
+    return []  # topics: external source, nothing to bring up
+
+
+def _launch_setup(context, *args, **kwargs):
+    mode = LaunchConfiguration('mode').perform(context).lower()
+    src_points, src_imu, mode_profile, use_sim_time = resolve_mode(mode)
+
+    # topics mode (src_*=None) falls back to the user-provided topic args
+    points_topic = src_points or LaunchConfiguration('points_topic').perform(context)
+    imu_topic = src_imu or LaunchConfiguration('imu_topic').perform(context)
+
+    # explicit profile arg overrides the mode default (blank = use mode default)
+    profile = LaunchConfiguration('profile').perform(context).lower() or mode_profile
+
+    maps_root = LaunchConfiguration('maps_root').perform(context)
+    map_name = LaunchConfiguration('map_name').perform(context)
+    output_dir, dump_path = resolve_map_paths(maps_root, map_name)
+
     config_path = LaunchConfiguration('config_path').perform(context)
-    profile = LaunchConfiguration('profile').perform(context).lower()
     viewer = LaunchConfiguration('viewer').perform(context).lower() in ('true', '1', 'yes')
     t_lidar_imu = None
     if profile == 'real':
         t_lidar_imu = load_extrinsic_yaml(LaunchConfiguration('calib_path').perform(context))
-    return prepare_config(config_path, '/tmp/glim_cfg_effective',
-                          profile=profile, viewer=viewer, t_lidar_imu=t_lidar_imu)
+    eff_config = prepare_config(config_path, '/tmp/glim_cfg_effective',
+                                profile=profile, viewer=viewer, t_lidar_imu=t_lidar_imu)
 
-
-def _nodes(context, *args, **kwargs):
-    config_path = _effective_config_path(context)
-    use_sim_time = LaunchConfiguration('use_sim_time')
     glim_node = Node(
         package='glim_ros', executable='glim_rosnode', name='glim_ros', output='screen',
         parameters=[{
-            'config_path': config_path,
-            'dump_path': LaunchConfiguration('dump_path'),
+            'config_path': eff_config,
+            'dump_path': dump_path,
             'use_sim_time': use_sim_time,
         }],
-        remappings=[
-            ('/points', LaunchConfiguration('points_topic')),
-            ('/imu', LaunchConfiguration('imu_topic')),
-        ],
+        remappings=[('/points', points_topic), ('/imu', imu_topic)],
     )
     map_saver = Node(
         package='go2_glim_mapping', executable='map_saver', name='map_saver', output='screen',
         parameters=[{
             'map_topic': '/glim_ros/map',
-            'output_dir': LaunchConfiguration('output_dir'),
-            'basename': LaunchConfiguration('map_basename'),
+            'output_dir': output_dir,
+            'basename': 'glim_map',
             'use_sim_time': use_sim_time,
         }],
     )
-    return [glim_node, map_saver]
+    return _source_actions(mode) + [glim_node, map_saver]
 
 
 def generate_launch_description():
     args = [
-        DeclareLaunchArgument('use_sim_time', default_value='true',
-                              description='Use simulation (Gazebo) clock'),
+        DeclareLaunchArgument('mode', default_value='sim',
+                              description="Sensor source: 'sim' (Gazebo), 'real' (Ouster), "
+                                          "or 'topics' (external /points + /imu)"),
+        DeclareLaunchArgument('map_name', default_value='glim_map',
+                              description='Map identity -> <maps_root>/<map_name>/glim_map.{ply,pcd}'),
+        DeclareLaunchArgument('maps_root', default_value='/root/glim-humble-docker/maps',
+                              description='Root dir for map output (bind-mounted repo by default)'),
+        DeclareLaunchArgument('viewer', default_value='false',
+                              description='Enable GLIM Iridescence live viewer (needs X11+GL)'),
+        DeclareLaunchArgument('profile', default_value='',
+                              description="GLIM config profile override; blank = derived from mode "
+                                          "(sim->sim, real/topics->real)"),
         DeclareLaunchArgument(
             'config_path',
             default_value=PathJoinSubstitution([FindPackageShare('go2_glim_mapping'), 'config', 'glim']),
             description='Absolute path to the GLIM config dir'),
-        DeclareLaunchArgument('points_topic', default_value='/points',
-                              description='Source PointCloud2 topic (remapped into GLIM)'),
-        DeclareLaunchArgument('imu_topic', default_value='/imu',
-                              description='Source Imu topic (remapped into GLIM)'),
-        DeclareLaunchArgument('dump_path', default_value='/root/glim-humble-docker/maps/dump',
-                              description='GLIM factor-graph dump dir (written on shutdown). '
-                                          'Default is on the bind-mounted repo so it persists on the host.'),
-        DeclareLaunchArgument('output_dir', default_value='/root/glim-humble-docker/maps',
-                              description='Where map_saver writes <map_basename>.{ply,pcd}. '
-                                          'Default is on the bind-mounted repo (host: ~/projects/glim-humble-docker/maps).'),
-        DeclareLaunchArgument('map_basename', default_value='glim_map'),
-        DeclareLaunchArgument('viewer', default_value='false',
-                              description='Enable GLIM Iridescence live map viewer (needs X11+GL)'),
-        DeclareLaunchArgument('profile', default_value='sim',
-                              description="Config profile: 'sim' (committed, headless) or "
-                                          "'real' (global_shutter_lidar=false + calibrated T_lidar_imu)"),
         DeclareLaunchArgument(
             'calib_path',
             default_value=PathJoinSubstitution(
                 [FindPackageShare('go2_glim_mapping'), 'config', 'calib', 'ouster_os1_32.yaml']),
-            description='YAML holding the calibrated T_lidar_imu (used when profile:=real)'),
+            description='YAML holding the calibrated T_lidar_imu (used when profile resolves to real)'),
+        # real / topics
+        DeclareLaunchArgument('sensor_hostname', default_value='',
+                              description='Ouster hostname or IP (required for mode:=real)'),
+        DeclareLaunchArgument('udp_dest', default_value='',
+                              description='Host IP for sensor UDP data (blank = driver auto-detect)'),
+        DeclareLaunchArgument('lidar_port', default_value='0',
+                              description='UDP port for lidar data (0 = auto-assign)'),
+        DeclareLaunchArgument('imu_port', default_value='0',
+                              description='UDP port for IMU data (0 = auto-assign)'),
+        DeclareLaunchArgument('point_type', default_value='native',
+                              description='Ouster point type (native/xyz/xyzi)'),
+        DeclareLaunchArgument('udp_profile_lidar', default_value='',
+                              description='Ouster UDP lidar profile (blank = sensor default)'),
+        DeclareLaunchArgument('timestamp_mode', default_value='TIME_FROM_INTERNAL_OSC',
+                              description='Ouster timestamp mode (mapping wants INTERNAL_OSC)'),
+        # sim
+        DeclareLaunchArgument('x', default_value='0.0', description='sim spawn x'),
+        DeclareLaunchArgument('y', default_value='0.0', description='sim spawn y'),
+        # topics
+        DeclareLaunchArgument('points_topic', default_value='/points',
+                              description='Source PointCloud2 topic (mode:=topics)'),
+        DeclareLaunchArgument('imu_topic', default_value='/imu',
+                              description='Source Imu topic (mode:=topics)'),
     ]
-    return LaunchDescription(args + [OpaqueFunction(function=_nodes)])
+    return LaunchDescription(args + [OpaqueFunction(function=_launch_setup)])
