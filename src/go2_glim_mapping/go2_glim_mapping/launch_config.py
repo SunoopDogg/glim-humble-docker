@@ -55,3 +55,29 @@ def load_extrinsic_yaml(path):
     with open(path) as f:
         data = yaml.safe_load(f)
     return data['T_lidar_imu']
+
+
+def resolve_map_paths(maps_root, map_name):
+    """maps_root + map_name -> (output_dir, dump_path). Each map gets its own dir."""
+    output_dir = os.path.join(maps_root, map_name)
+    dump_path = os.path.join(output_dir, 'dump')
+    return output_dir, dump_path
+
+
+_MODE_TABLE = {
+    'sim': ('/points', '/imu', 'sim', True),
+    'real': ('/ouster/points', '/ouster/imu', 'real', False),
+    'topics': (None, None, 'real', False),
+}
+
+
+def resolve_mode(mode):
+    """mode -> (points_topic, imu_topic, profile, use_sim_time).
+
+    points/imu are None for 'topics' (caller supplies them). use_sim_time is True
+    only for 'sim'. Unknown mode raises ValueError.
+    """
+    try:
+        return _MODE_TABLE[mode]
+    except KeyError:
+        raise ValueError(f"unknown mode {mode!r}; expected one of {sorted(_MODE_TABLE)}")

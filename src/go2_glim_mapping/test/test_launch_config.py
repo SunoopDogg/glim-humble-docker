@@ -3,7 +3,12 @@ import os
 
 import pytest
 
-from go2_glim_mapping.launch_config import load_extrinsic_yaml, prepare_config
+from go2_glim_mapping.launch_config import (
+    load_extrinsic_yaml,
+    prepare_config,
+    resolve_map_paths,
+    resolve_mode,
+)
 
 
 def _make_src(tmp_path):
@@ -69,3 +74,32 @@ def test_load_extrinsic_yaml_reads_tum_list(tmp_path):
     p = tmp_path / "calib.yaml"
     p.write_text("# comment\nT_lidar_imu: [0.0, 0.0, 0.03, 0.0, 0.0, 1.0, 0.0]\n")
     assert load_extrinsic_yaml(str(p)) == [0.0, 0.0, 0.03, 0.0, 0.0, 1.0, 0.0]
+
+
+def test_resolve_map_paths_default():
+    out, dump = resolve_map_paths('/root/glim-humble-docker/maps', 'glim_map')
+    assert out == '/root/glim-humble-docker/maps/glim_map'
+    assert dump == '/root/glim-humble-docker/maps/glim_map/dump'
+
+
+def test_resolve_map_paths_named():
+    out, dump = resolve_map_paths('/maps', 'room_a')
+    assert out == '/maps/room_a'
+    assert dump == '/maps/room_a/dump'
+
+
+def test_resolve_mode_sim():
+    assert resolve_mode('sim') == ('/points', '/imu', 'sim', True)
+
+
+def test_resolve_mode_real():
+    assert resolve_mode('real') == ('/ouster/points', '/ouster/imu', 'real', False)
+
+
+def test_resolve_mode_topics():
+    assert resolve_mode('topics') == (None, None, 'real', False)
+
+
+def test_resolve_mode_unknown_raises():
+    with pytest.raises(ValueError):
+        resolve_mode('bag')
