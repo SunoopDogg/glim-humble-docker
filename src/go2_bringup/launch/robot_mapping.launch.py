@@ -46,10 +46,11 @@ def generate_launch_description():
     mapping = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             PathJoinSubstitution(
-                [FindPackageShare('go2_glim_mapping'), 'launch', 'real_mapping.launch.py']
+                [FindPackageShare('go2_glim_mapping'), 'launch', 'mapping.launch.py']
             )
         ),
         launch_arguments={
+            'mode': 'real',
             'sensor_hostname': LaunchConfiguration('sensor_hostname'),
             'udp_dest': LaunchConfiguration('udp_dest'),
             'lidar_port': LaunchConfiguration('lidar_port'),

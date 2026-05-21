@@ -5,7 +5,7 @@
   <version>0.1.0</version>
   <description>Bringup package for Go2 EDU + Ouster OS1-32 mapping session.
     PS4 joystick → cmd_vel → Go2 SportMode (unitree_api/Request via DDS), integrated with
-    go2_glim_mapping/real_mapping.launch.py into a single launch entry point.</description>
+    go2_glim_mapping/mapping.launch.py (mode:=real) into a single launch entry point.</description>
   <maintainer email="aswoo55555@gmail.com">SunoopDogg</maintainer>
   <license>Apache-2.0</license>
 
