@@ -3,7 +3,7 @@
 Reuses go2_glim_mapping's validated sim rig (room.world + sensor_bot.urdf), which
 provides the base_link<->sensor TF. Runs navigation instead of mapping: rko_lio +
 icp_localization localize against a prebuilt sim .pcd map and Nav2 drives the rig to
-goals via /cmd_vel. Build the sim map first with go2_glim_mapping/sim_mapping.launch.py
+goals via /cmd_vel. Build the sim map first with go2_glim_mapping/mapping.launch.py mode:=sim
 (it writes glim_map.pcd), then point map_pcd/costmap_yaml at it.
 
   ros2 launch go2_glim_navigation sim_navigation.launch.py \

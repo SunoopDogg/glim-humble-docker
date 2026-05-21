@@ -9,8 +9,7 @@ Validated end-to-end in Gazebo Classic (headless): a moving LiDAR+IMU produces a
 ```
 go2_glim_mapping/
 ├── launch/
-│   ├── mapping.launch.py      # glim_rosnode + map_saver (configurable topics)
-│   └── sim_mapping.launch.py  # headless Gazebo + diff-drive sensor rig + mapping (E2E test)
+│   └── mapping.launch.py      # unified: mode:=sim|real|topics, map_name:=<name>
 ├── config/
 │   ├── glim/                  # GLIM config (validated overrides; see "Config" below)
 │   └── rviz/
@@ -30,13 +29,16 @@ colcon build --packages-select go2_glim_mapping
 source install/setup.bash
 ```
 Requires `glim_ros` already built (GLIM deps via `scripts/install-deps.sh` + `colcon build`).
-The `sim_mapping` launch additionally needs `gazebo_ros` + `velodyne_gazebo_plugins`.
+`mode:=sim` additionally needs `gazebo_ros` + `velodyne_gazebo_plugins`; `mode:=real` needs `ouster_ros`.
 
 ## Run
 
+All mapping runs go through one launch — pick the source with `mode` and name the
+map with `map_name` (output isolates to `<maps_root>/<map_name>/`).
+
 ### End-to-end sim test (no real robot)
 ```bash
-ros2 launch go2_glim_mapping sim_mapping.launch.py
+ros2 launch go2_glim_mapping mapping.launch.py mode:=sim map_name:=room_a
 # drive it (separate shell):
 ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.25}}"
 # Ctrl-C the launch when done.
@@ -44,7 +46,7 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angula
 
 **Live GLIM map viewer** (Iridescence window — needs X11 + GL):
 ```bash
-ros2 launch go2_glim_mapping sim_mapping.launch.py viewer:=true   # or on mapping.launch.py
+ros2 launch go2_glim_mapping mapping.launch.py mode:=sim viewer:=true
 ```
 The committed config stays headless; `viewer:=true` copies it to `/tmp/glim_cfg_viewer`
 and adds `libstandard_viewer.so` at launch (no committed file is changed). To watch
@@ -56,18 +58,22 @@ launch is up.
 > shell — cross-distro DDS discovery otherwise breaks `ros2` CLI (TypeHash errors)
 > and spams TF "jump back in time".
 
-### Mapping only (bring your own sensor source: another sim, a bag, or a real Ouster)
+### External source (`mode:=topics`) — another sim, a bag, or a running Ouster driver
 ```bash
-# real Ouster (modern ouster-ros driver publishes /ouster/*):
-ros2 launch go2_glim_mapping mapping.launch.py \
-    points_topic:=/ouster/points imu_topic:=/ouster/imu use_sim_time:=false
+ros2 launch go2_glim_mapping mapping.launch.py mode:=topics \
+    points_topic:=/ouster/points imu_topic:=/ouster/imu
 ```
+No source is brought up; GLIM subscribes to the topics you name. `mode:=topics`
+fixes the **real** profile and `use_sim_time=false`; pass `profile:=sim` if the
+source has no per-point times (Gazebo-style). Note: `mode:=topics` cannot turn on
+`use_sim_time` — use `mode:=sim` for the in-tree Gazebo rig (which needs sim time).
 
 ### Real Ouster on a Go2 EDU (onboard AGX Orin)
 
 One-shot driver + mapping (Ouster internal IMU, no PTP for v1):
 ```bash
-ros2 launch go2_glim_mapping real_mapping.launch.py sensor_hostname:=os1-xxxx.local
+ros2 launch go2_glim_mapping mapping.launch.py mode:=real map_name:=lab \
+    sensor_hostname:=os1-xxxx.local udp_dest:=<host-IP> lidar_port:=7502 imu_port:=7503
 ```
 This runs `ouster-ros` with `timestamp_mode:=TIME_FROM_INTERNAL_OSC` + `point_type:=native`
 and the GLIM `real` profile (`global_shutter_lidar=false`, calibrated `T_lidar_imu`).
@@ -88,15 +94,19 @@ Ouster units need a 180° Z rotation (`qz≈1, qw≈0`); the identity placeholde
 > need wall-clock alignment.
 
 ### Map output
-Defaults write under the **bind-mounted repo** (`/root/glim-humble-docker/maps` →
-host `~/projects/glim-humble-docker/maps/`, gitignored) so maps persist on the host
-and survive container restarts. Override with `output_dir:=` / `dump_path:=`.
-- **Live global map** → `map_saver` writes `<output_dir>/<map_basename>.ply` and `.pcd`
-  (default `maps/glim_map.{ply,pcd}`) on shutdown, or on demand:
+`map_name` gives each map its own directory under the **bind-mounted repo**
+(`maps_root` default `/root/glim-humble-docker/maps` → host
+`~/projects/glim-humble-docker/maps/`, gitignored) so maps persist on the host,
+survive container restarts, and a new run never overwrites a differently-named map.
+Override the root with `maps_root:=`.
+- **Live global map** → `map_saver` writes `<maps_root>/<map_name>/glim_map.{ply,pcd}`
+  (default `maps/glim_map/glim_map.{ply,pcd}`) on shutdown, or on demand:
   `ros2 service call /map_saver/save_map std_srvs/srv/Trigger`
-- **Factor-graph dump** → `glim_rosnode` writes `dump_path` (default `maps/dump`) on shutdown.
+- **Factor-graph dump** → `glim_rosnode` writes `<maps_root>/<map_name>/dump` on shutdown.
   Re-optimize / export PLY in the GUI: `ros2 run glim_ros offline_viewer` → File > Save > Export Points.
   Convert that PLY: `ros2 run go2_glim_mapping ply_to_pcd map.ply map.pcd`.
+- **Downstream nav** reads `map_pcd:=maps/<map_name>/glim_map.pcd` (default path is now
+  `maps/glim_map/glim_map.pcd`, not `maps/glim_map.pcd`).
 
 ## Config (`config/glim/`)
 
