@@ -107,6 +107,14 @@ ros2 service call /go2_sport_bridge/enable std_srvs/srv/SetBool "{data: true}"
 ```
 
 ## Known issues / risks
+- **Goal not roughly ahead → robot spins in place / circles, "Failed to make progress"** (root-caused
+  + fixed 2026-06-17). RPP `use_rotate_to_heading` (default true) rotates in place before driving
+  (`/cmd_vel` linear.x=0); `SimpleProgressChecker` counts only linear motion → aborts mid-turn → loop.
+  Fixed in `config/nav2/nav2_params.yaml`: `controller_server.FollowPath.use_rotate_to_heading: false`
+  (SmacHybrid DUBIN path is already a feasible forward arc → turn-while-driving), plus explicit
+  `progress_checker`/`goal_checker` and `goal_checker.yaw_goal_tolerance: 3.14` (ignore final heading,
+  else it circles the goal). Diagnose motion-free: goal with bridge gated OFF, rclpy-sub `/cmd_vel` —
+  linear.x≈0+angular≠0 = the bug; goal straight ahead gives linear.x=desired_linear_vel.
 - **Map covers only ~65%** — the save was truncated (`glim_map.pcd` 1.89M of 2.91M pts). icp will
   lose lock in unmapped regions. Test inside the mapped area; for full coverage re-export from `maps/dump/`.
 - **icp QoS fix** — Ouster publishes BEST_EFFORT; icp subscribers were RELIABLE → 0 msgs. Fixed in
