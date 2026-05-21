@@ -19,10 +19,10 @@
   <exec_depend>launch_ros</exec_depend>
   <exec_depend>glim_ros</exec_depend>
 
-  <!-- needed only for the real_mapping launch (real Ouster driver) -->
+  <!-- needed for mode:=real (real Ouster driver) -->
   <exec_depend>ouster_ros</exec_depend>
 
-  <!-- needed only for the sim_mapping end-to-end test launch -->
+  <!-- needed for mode:=sim (Gazebo end-to-end test rig) -->
   <exec_depend>gazebo_ros</exec_depend>
   <exec_depend>velodyne_gazebo_plugins</exec_depend>
 

@@ -1,6 +1,6 @@
 """Real-hardware autonomous navigation: ouster driver + rko_lio + icp_localization + Nav2.
 
-Symmetric to go2_glim_mapping/real_mapping.launch.py. Brings up the Ouster OS1-32
+Symmetric to go2_glim_mapping/mapping.launch.py (mode:=real). Brings up the Ouster OS1-32
 (INTERNAL_OSC, native point type), publishes the base_link->os_sensor mounting
 transform that navigation needs (mapping never required base_link), and runs
 navigation.launch.py (rko_lio odometry + icp_localization map->odom + Nav2) against
