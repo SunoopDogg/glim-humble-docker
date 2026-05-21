@@ -13,7 +13,7 @@ mounting on the Go2 — measure it for your rig. Confirm the Ouster cloud frame_
 
   ros2 launch go2_glim_navigation real_navigation.launch.py \
       sensor_hostname:=os1-xxxx.local \
-      map_pcd:=/root/glim-humble-docker/maps/glim_map.pcd \
+      map_pcd:=/root/glim-humble-docker/maps/glim_map/glim_map.pcd \
       costmap_yaml:=/root/glim-humble-docker/maps/glim_costmap.yaml
 """
 import os

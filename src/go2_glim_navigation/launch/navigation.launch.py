@@ -20,7 +20,7 @@ live odometry+lidar data; the committed icp config (icp_localization_ros2/config
 the calibration/ICP tuning and is patched only for map + topics here.
 
   ros2 launch go2_glim_navigation navigation.launch.py \
-      map_pcd:=/root/glim-humble-docker/maps/glim_map.pcd \
+      map_pcd:=/root/glim-humble-docker/maps/glim_map/glim_map.pcd \
       costmap_yaml:=/root/glim-humble-docker/maps/glim_costmap.yaml \
       points_topic:=/ouster/points imu_topic:=/ouster/imu use_sim_time:=false
 """

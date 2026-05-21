@@ -63,8 +63,10 @@ launch is up.
 ros2 launch go2_glim_mapping mapping.launch.py mode:=topics \
     points_topic:=/ouster/points imu_topic:=/ouster/imu
 ```
-No source is brought up; GLIM subscribes to the topics you name (real profile by
-default — pass `profile:=sim` if the source is a sim/bag with no per-point times).
+No source is brought up; GLIM subscribes to the topics you name. `mode:=topics`
+fixes the **real** profile and `use_sim_time=false`; pass `profile:=sim` if the
+source has no per-point times (Gazebo-style). Note: `mode:=topics` cannot turn on
+`use_sim_time` — use `mode:=sim` for the in-tree Gazebo rig (which needs sim time).
 
 ### Real Ouster on a Go2 EDU (onboard AGX Orin)
 
