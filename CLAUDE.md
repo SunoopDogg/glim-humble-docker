@@ -78,7 +78,7 @@ cd src/go2_glim_mapping && uv run --no-project --with numpy --with pyyaml --with
 sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0   # inside container
 ros2 launch go2_bringup robot_mapping.launch.py \
     sensor_hostname:=<Ouster-IP> udp_dest:=<Jetson-eno1-IP> \
-    lidar_port:=7502 imu_port:=7503 udp_profile_lidar:=LEGACY
+    lidar_port:=7502 imu_port:=7503 udp_profile_lidar:=LEGACY map_name:=lab
 # Save map (separate terminal): ros2 service call /map_saver/save_map std_srvs/srv/Trigger '{}'
 ```
 
