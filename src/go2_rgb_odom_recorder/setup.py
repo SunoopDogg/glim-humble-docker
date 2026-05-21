@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'pose_from_tf = go2_rgb_odom_recorder.pose_from_tf:main',
+            'trim_bag = go2_rgb_odom_recorder.bag_trim:main',
         ],
     },
 )

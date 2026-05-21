@@ -52,6 +52,20 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 \
   uv run --no-project --with pytest python -m pytest test/ -v
 ```
 
+## Post-processing: trim pose-less RGB
+Recording starts at launch (t=0), but `/go2/map_pose` only appears AFTER icp converges
+(initial pose set). So the raw bag has RGB frames with no pose: the **front** (before
+convergence), any **mid-run gaps** (icp tracking loss), and the **tail** (after the last
+pose). `trim_bag` drops them in one pass — it keeps an RGB frame iff a pose exists within
+±tolerance of its stamp, and copies all pose messages verbatim:
+```bash
+ros2 run go2_rgb_odom_recorder trim_bag \
+    --in bags/session1 --out bags/session1_trimmed --tolerance 0.1
+```
+`--tolerance` is seconds (default 0.1 = one 10 Hz period); `--out` must not exist. Drive
+inside an existing map → set the initial pose right after launch to minimise the dropped
+front segment.
+
 ## Acceptance (hardware)
 1. **Topics live** — with the stack up + initial pose set + icp converged, verify with a
    short rclpy subscriber (NOT `ros2 topic hz`, unreliable under cyclonedds), and
