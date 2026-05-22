@@ -36,6 +36,7 @@ ament_python orchestration around `glim_ros` (launch + GLIM config + map save). 
 - Sim E2E (headless): `ros2 launch go2_glim_mapping mapping.launch.py mode:=sim map_name:=room_a` (`+ viewer:=true` for the GLIM Iridescence GUI). Drive with `ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.25}}"`.
 - Real Ouster (one-shot driver + mapping): `ros2 launch go2_glim_mapping mapping.launch.py mode:=real sensor_hostname:=os1-xxxx.local map_name:=lab` (Ouster internal IMU, real profile). Or map an existing source: `mapping.launch.py mode:=topics points_topic:=/ouster/points imu_topic:=/ouster/imu`.
 - Map out → bind-mounted `maps/` (`glim_map.{ply,pcd}` + `dump/`); trigger via `/map_saver/save_map` (std_srvs/Trigger) or Ctrl-C. **Must drive first** — `/glim_ros/map` only publishes after a submap finalizes (tune `max_num_keyframes` in `config_sub_mapping_*.json`).
+- **Map editing (GLIM official)**: `ros2 run glim_ros map_editor` (point-level — Box/Sphere select, Remove/Outlier removal, MinCut/RegionGrowing segmentation) and `ros2 run glim_ros offline_viewer` (graph-level — re-optimize, merge sessions, Export Points→PLY). BOTH load the **dump dir** (`maps/<name>/dump`), NOT the flat `.pcd`; need X11+GL (`DISPLAY=:0`). Back up dump before editing (save overwrites). View a saved `.pcd` in RViz: `ros2 run pcl_ros pcd_to_pointcloud --ros-args -p file_name:=<abs.pcd> -p tf_frame:=map` → RViz PointCloud2 on `/cloud_pcd` set **Volatile**.
 
 ## Navigation package (`go2_glim_navigation`)
 
@@ -84,6 +85,8 @@ ros2 launch go2_bringup robot_mapping.launch.py \
 
 ## Gotchas
 
+- **Editing a bind-mounted launch/config does NOT update `install/`**: `ros2 launch ... --show-args` and runtime read the **installed copy** under `install/<pkg>/share/`, not `src/`. After editing any launch/config, `colcon build --packages-select <pkg>` in the container before launching or the change is silently ignored (ament_python install is ~1-2s).
+- **GLIM global map `.pcd` is heavily downsampled (NOT truncated)**: `config_sub_mapping_*.json` `submap_downsample_resolution=0.1` + `submap_target_num_points=50000` → a ~19 m indoor run saves ~46k points / ~1 MB. Small size is normal density, not data loss. Map-quality quick-check from the dump: `wc -l maps/<name>/dump/traj_lidar.txt` (keyframes), count `dump/0*` dirs (submaps), bbox of the `.pcd`.
 - The git submodules (`.gitmodules`: `src/glim`, `src/glim_ros2`, `src/ouster-ros`, `src/unitree-go2-ros2`, `src/unitree_ros2`, `src/icp_localization_ros2`) are **empty checkouts** until `git submodule update --init --recursive` is run. Build commands fail silently-ish without this.
 - `gtsam_points` defaults to `BUILD_WITH_CUDA=ON` in `install-deps.sh`. On a GPU-less machine you must edit that flag to `OFF` or the build fails.
 - The GLIM real-time viewer needs working X11 forwarding — the compose files already mount `/tmp/.X11-unix` and set `DISPLAY`; the host must allow X connections (`xhost +local:`).
