@@ -4,7 +4,9 @@ Record RealSense D435i RGB + Go2 map-frame pose (x, y, θ) into one rosbag2 whil
 teleop-driving inside a prebuilt GLIM map.
 
 ## What it records
-- `/camera/camera/color/image_raw` — raw `sensor_msgs/Image`, color only, 10 fps (640×480).
+- `/camera/camera/color/image_raw` — raw `sensor_msgs/Image`, color only, 15 fps (640×480).
+  (D435i color FPS must be one of {6,15,30,60}; 10 is invalid and silently falls back to
+  1280×720×30. 15 is the closest valid rate to the 10 Hz pose; `trim_bag` tolerance pairs them.)
 - `/go2/map_pose` — `geometry_msgs/PoseStamped` in the `map` frame, 10 Hz (θ = yaw of the quaternion).
 
 ## How it works
