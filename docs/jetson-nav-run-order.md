@@ -76,22 +76,28 @@ ros2 run icp_localization_ros2 icp_localization --ros-args \
 # GATE (N2): map->odom stable at rest (icp converges from origin to true pose);
 #   /registered_cloud ~10 Hz; NO "incompatible QoS" warning.
 
-# --- 6. visual verify (RViz on host display :1) ---
+# --- 6. visual verify (RViz) ---
+# PREFERRED: skip this manual block -- step 7's `real_navigation.launch.py rviz:=true`
+#   bundles RViz (config/rviz/navigation.rviz: costmaps + /plan + grey /cloud_pcd prior
+#   map + orange /ouster/points + 2D Pose Estimate/Nav2 Goal tools). Needs `apt-get install
+#   -y ros-humble-pcl-ros` (one-time) and host `xhost +local:root`; DISPLAY arg default :0.
+# FALLBACK (standalone, if you want RViz without relaunching the stack):
 # (host) xhost +local:root
 python3 maps/pub_map.py maps/glim_map.pcd          # latched /prior_map for overlay
 DISPLAY=:1 rviz2 -d maps/nav_check.rviz            # grey=prior_map, green=registered_cloud
 # GATE (N2 visual): green registered scan overlays grey prior map. If offset -> RViz
-#   "2D Pose Estimate" at the robot's true pose (icp does NOT auto-relocalize globally).
+#   "2D Pose Estimate" at the robot's true pose (icp does NOT auto-relocalize globally).1
 
 # --- 7. Nav2 + goal (N3: FIRST ROBOT MOTION). Run real_navigation ALONE. ---
 # Do NOT also run steps 2-5: real_navigation bundles ouster+rko_lio+icp+nav2+go2_sport_bridge.
 # Double-launching Ouster causes the os_driver port-7503 collision + rko_lio cold-start race.
 ros2 launch go2_glim_navigation real_navigation.launch.py \
     sensor_hostname:=192.168.2.32 udp_dest:=192.168.2.1 lidar_port:=7502 imu_port:=7503 \
-    udp_profile_lidar:=LEGACY \
+    udp_profile_lidar:=LEGACY rviz:=true \
     map_pcd:=/root/glim-humble-docker/maps/glim_map.pcd \
     costmap_yaml:=/root/glim-humble-docker/maps/glim_costmap.yaml \
     lidar_frame:=os_sensor mount_xyz:="0.0 0.0 0.0" mount_rpy:="0.0 0.0 0.0"
+# rviz:=true opens the preconfigured RViz (DISPLAY :0 default; host `xhost +local:root` first).
 # Set /initialpose in RViz, then "Nav2 Goal".
 
 # --- 8. enable real robot motion (N3) — Go2 must already be STANDING (sport mode) ---
