@@ -24,6 +24,7 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, ExecuteProcess, IncludeLaunchDescription, SetEnvironmentVariable,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
@@ -70,6 +71,18 @@ def generate_launch_description():
                               description='Parent dir for the bag (must be writable)'),
         DeclareLaunchArgument('bag_name', default_value='go2_rgb_odom',
                               description='Bag dir name; must NOT already exist'),
+        # visualization (off by default so headless/SSH runs are unaffected)
+        DeclareLaunchArgument('rviz', default_value='false',
+                              description='rviz:=true also starts RViz (preconfigured displays) '
+                                          'and a pcd_to_pointcloud node publishing the prior map '
+                                          'on /cloud_pcd so you can aim the 2D Pose Estimate.'),
+        DeclareLaunchArgument('display', default_value=':0',
+                              description='X DISPLAY for RViz (Jetson physical display, varies '
+                                          'per boot -- check ls /tmp/.X11-unix).'),
+        DeclareLaunchArgument(
+            'rviz_config',
+            default_value=os.path.join(recorder_share, 'rviz', 'recorder.rviz'),
+            description='RViz config loaded when rviz:=true.'),
     ]
 
     localization = IncludeLaunchDescription(
@@ -123,5 +136,25 @@ def generate_launch_description():
         output='screen',
     )
 
+    # rviz:=true only -- publish the prior map as a reference cloud + open RViz.
+    # icp never republishes the prior map; without /cloud_pcd there is nothing to
+    # aim the 2D Pose Estimate at. Latched (transient_local) so RViz gets it once.
+    prior_map = Node(
+        package='pcl_ros', executable='pcd_to_pointcloud', name='prior_map_pub',
+        output='screen', condition=IfCondition(LaunchConfiguration('rviz')),
+        parameters=[{
+            'file_name': LaunchConfiguration('map_pcd'),
+            'tf_frame': 'map',
+            'publishing_period_ms': 1000,
+        }],
+    )
+    rviz = Node(
+        package='rviz2', executable='rviz2', name='rviz2', output='screen',
+        condition=IfCondition(LaunchConfiguration('rviz')),
+        arguments=['-d', LaunchConfiguration('rviz_config')],
+        additional_env={'DISPLAY': LaunchConfiguration('display')},
+    )
+
     return LaunchDescription(
-        [set_rmw, set_dds] + args + [localization, realsense, pose_node, record])
+        [set_rmw, set_dds] + args
+        + [localization, realsense, pose_node, record, prior_map, rviz])

@@ -18,6 +18,8 @@
   <exec_depend>icp_localization_ros2</exec_depend>
   <exec_depend>go2_glim_navigation</exec_depend>
   <exec_depend>go2_bringup</exec_depend>
+  <exec_depend>pcl_ros</exec_depend>
+  <exec_depend>rviz2</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

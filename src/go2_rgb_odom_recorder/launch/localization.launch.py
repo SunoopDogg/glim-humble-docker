@@ -18,7 +18,9 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
+from launch.actions import (
+    DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction,
+)
 from launch.launch_description_sources import AnyLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
@@ -55,6 +57,10 @@ def _localization(context, *args, **kwargs):
             'use_sim_time': False,
         }],
     )
+    # rko_lio hard-aborts (exit -6, "Number of correspondences are 0") if it grabs a
+    # cold first scan before os_driver streams -- the launch does NOT respawn it, so the
+    # whole map->odom->base_link chain never appears. Delay its start so os_driver is warm.
+    rko_lio = TimerAction(period=8.0, actions=[rko_lio])
 
     icp_share = get_package_share_directory('icp_localization_ros2')
     icp_node_params = prepare_icp_params(
