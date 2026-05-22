@@ -52,7 +52,12 @@ def generate_launch_description():
         DeclareLaunchArgument('mount_rpy', default_value='0.0 0.0 0.0'),
         DeclareLaunchArgument('base_frame', default_value='base_link'),
         # recorder-specific
-        DeclareLaunchArgument('rgb_topic', default_value='/camera/camera/color/image_raw'),
+        DeclareLaunchArgument('rgb_topic',
+                              default_value='/camera/camera/color/image_raw/compressed',
+                              description='JPEG CompressedImage auto-advertised by the realsense '
+                                          'node via image_transport (needs ros-humble-compressed-'
+                                          'image-transport). ~10x smaller than raw. Use '
+                                          '/camera/camera/color/image_raw for raw sensor_msgs/Image.'),
         DeclareLaunchArgument('pose_topic', default_value='/go2/map_pose'),
         DeclareLaunchArgument('rate', default_value='10.0',
                               description='pose_from_tf publish rate (Hz)'),

@@ -4,7 +4,10 @@ Record RealSense D435i RGB + Go2 map-frame pose (x, y, θ) into one rosbag2 whil
 teleop-driving inside a prebuilt GLIM map.
 
 ## What it records
-- `/camera/camera/color/image_raw` — raw `sensor_msgs/Image`, color only, 15 fps (640×480).
+- `/camera/camera/color/image_raw/compressed` — JPEG `sensor_msgs/CompressedImage`, color
+  only, 15 fps (640×480). ~10x smaller than raw (~1.2 MB/s vs ~12 MB/s). The realsense node
+  auto-advertises this via image_transport — needs `ros-humble-compressed-image-transport`.
+  Pass `rgb_topic:=/camera/camera/color/image_raw` to record raw `sensor_msgs/Image` instead.
   (D435i color FPS must be one of {6,15,30,60}; 10 is invalid and silently falls back to
   1280×720×30. 15 is the closest valid rate to the 10 Hz pose; `trim_bag` tolerance pairs them.)
 - `/go2/map_pose` — `geometry_msgs/PoseStamped` in the `map` frame, 10 Hz (θ = yaw of the quaternion).
@@ -24,6 +27,12 @@ stamped with the transform's own time (not wall-clock) so RGB↔pose alignment s
 - A prebuilt `.pcd` map (`maps/glim_map.pcd`).
 - **`ros-humble-realsense2-camera` apt-installed in the container** — NOT in the base image:
   `apt-get install -y ros-humble-realsense2-camera` (belongs in `scripts/install-deps.sh`).
+- **`ros-humble-compressed-image-transport`** — for the default JPEG RGB topic:
+  `apt-get install -y ros-humble-compressed-image-transport` (also belongs in `install-deps.sh`).
+- **RealSense `/dev/video*` must exist in the container.** If the camera was plugged in AFTER
+  the container started, `/dev` is a stale snapshot (no video nodes) and the node logs
+  "No RealSense devices were found". Fix: `docker restart <container>` with the camera
+  connected (re-snapshots `/dev`; native deps / install / apt packages survive a restart).
 - `ros-humble-rmw-cyclonedds-cpp` installed (Go2 path is CycloneDDS-only).
 - `ufw allow in on eno1` + `ufw allow 7502/udp 7503/udp` (see project CLAUDE.md).
 - `sysctl -w net.ipv4.conf.eno1.rp_filter=0 && sysctl -w net.ipv4.conf.all.rp_filter=0`.
