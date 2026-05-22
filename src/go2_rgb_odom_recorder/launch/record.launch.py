@@ -56,8 +56,11 @@ def generate_launch_description():
         DeclareLaunchArgument('pose_topic', default_value='/go2/map_pose'),
         DeclareLaunchArgument('rate', default_value='10.0',
                               description='pose_from_tf publish rate (Hz)'),
-        DeclareLaunchArgument('color_profile', default_value='640,480,10',
-                              description='RealSense color WIDTH,HEIGHT,FPS'),
+        DeclareLaunchArgument('color_profile', default_value='640,480,15',
+                              description='RealSense color WIDTH,HEIGHT,FPS. D435i color FPS '
+                                          'must be one of {6,15,30,60} -- 10 is NOT a valid '
+                                          'sensor rate and silently falls back to 1280x720x30. '
+                                          '15 is the closest valid rate to the 10 Hz pose.'),
         DeclareLaunchArgument('output_dir', default_value='bags',
                               description='Parent dir for the bag (must be writable)'),
         DeclareLaunchArgument('bag_name', default_value='go2_rgb_odom',
