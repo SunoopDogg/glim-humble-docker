@@ -23,6 +23,7 @@ from launch import LaunchDescription
 from launch.actions import (
     DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, SetEnvironmentVariable,
 )
+from launch.conditions import IfCondition
 from launch.launch_description_sources import (
     AnyLaunchDescriptionSource,
     PythonLaunchDescriptionSource,
@@ -82,6 +83,20 @@ def generate_launch_description():
                               description='Yaw velocity cap (rad/s) applied to Nav2 cmd_vel.'),
     ]
 
+    args += [
+        DeclareLaunchArgument('rviz', default_value='false',
+                              description='rviz:=true opens RViz2 (nav view) and a '
+                                          'pcd_to_pointcloud node publishing the prior map on '
+                                          '/cloud_pcd for the 3D overlay.'),
+        DeclareLaunchArgument('display', default_value=':0',
+                              description='X DISPLAY for RViz (Jetson physical display, varies '
+                                          'per boot -- check ls /tmp/.X11-unix).'),
+        DeclareLaunchArgument(
+            'rviz_config',
+            default_value=os.path.join(pkg_share, 'config', 'rviz', 'navigation.rviz'),
+            description='RViz config loaded when rviz:=true.'),
+    ]
+
     ouster = IncludeLaunchDescription(
         AnyLaunchDescriptionSource(os.path.join(ouster_share, 'launch', 'sensor.launch.xml')),
         launch_arguments={
@@ -129,7 +144,27 @@ def generate_launch_description():
         }],
     )
 
+    # rviz:=true only -- publish the prior map as a reference cloud + open RViz.
+    # icp never republishes the prior map; without /cloud_pcd there is nothing to
+    # aim the 2D Pose Estimate at. pcd_to_pointcloud publishes /cloud_pcd VOLATILE.
+    prior_map = Node(
+        package='pcl_ros', executable='pcd_to_pointcloud', name='prior_map_pub',
+        output='screen', condition=IfCondition(LaunchConfiguration('rviz')),
+        parameters=[{
+            'file_name': LaunchConfiguration('map_pcd'),
+            'tf_frame': 'map',
+            'publishing_period_ms': 1000,
+        }],
+    )
+    rviz = Node(
+        package='rviz2', executable='rviz2', name='rviz2', output='screen',
+        condition=IfCondition(LaunchConfiguration('rviz')),
+        arguments=['-d', LaunchConfiguration('rviz_config')],
+        additional_env={'DISPLAY': LaunchConfiguration('display')},
+    )
+
     return LaunchDescription(
         [set_rmw, set_dds] + args
-        + [ouster, OpaqueFunction(function=_static_tf), navigation, sport_bridge]
+        + [ouster, OpaqueFunction(function=_static_tf), navigation, sport_bridge,
+           prior_map, rviz]
     )
