@@ -32,7 +32,7 @@ All services run `privileged`, `network_mode: host`, `ipc: host` (required for R
 ## Mapping package (`go2_glim_mapping`)
 
 ament_python orchestration around `glim_ros` (launch + GLIM config + map save). Robot-agnostic on `/points` + `/imu`.
-- One unified launch `mapping.launch.py` with `mode:=sim|real|topics` + `map_name:=<name>` (output isolates to `maps/<map_name>/`; sim_mapping/real_mapping deleted, folded into `mode`).
+- One unified launch `mapping.launch.py` with `mode:=sim|real|topics` + `map_name:=<name>` (output isolates to `maps/<map_name>/`; sim_mapping/real_mapping deleted, folded into `mode`). `rviz:=true` opens RViz2 (`config/rviz/mapping.rviz`) with `/glim_ros/map` (**Transient Local** — GLIM publishes the map latched; a Volatile RViz display gets 0 until the next submap finalizes), live scan, odom, TF; `robot_mapping.launch.py` forwards `rviz`/`map_name`/`viewer`.
 - Sim E2E (headless): `ros2 launch go2_glim_mapping mapping.launch.py mode:=sim map_name:=room_a` (`+ viewer:=true` for the GLIM Iridescence GUI). Drive with `ros2 topic pub /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angular: {z: 0.25}}"`.
 - Real Ouster (one-shot driver + mapping): `ros2 launch go2_glim_mapping mapping.launch.py mode:=real sensor_hostname:=os1-xxxx.local map_name:=lab` (Ouster internal IMU, real profile). Or map an existing source: `mapping.launch.py mode:=topics points_topic:=/ouster/points imu_topic:=/ouster/imu`.
 - Map out → bind-mounted `maps/` (`glim_map.{ply,pcd}` + `dump/`); trigger via `/map_saver/save_map` (std_srvs/Trigger) or Ctrl-C. **Must drive first** — `/glim_ros/map` only publishes after a submap finalizes (tune `max_num_keyframes` in `config_sub_mapping_*.json`).

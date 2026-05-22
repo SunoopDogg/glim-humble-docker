@@ -44,6 +44,14 @@ ros2 topic pub -r 20 /cmd_vel geometry_msgs/msg/Twist "{linear: {x: 0.5}, angula
 # Ctrl-C the launch when done.
 ```
 
+**Live map in RViz2** (`/glim_ros/map` + live scan + odom + TF, fixed frame `map`):
+```bash
+ros2 launch go2_glim_mapping mapping.launch.py mode:=sim rviz:=true
+```
+Uses `config/rviz/mapping.rviz`. The Global Map display is **Transient Local** (the
+map is latched + only updates when a submap finalizes — drive first, else blank).
+`rviz:=true` also works on `mode:=real` and `go2_bringup robot_mapping.launch.py`.
+
 **Live GLIM map viewer** (Iridescence window — needs X11 + GL):
 ```bash
 ros2 launch go2_glim_mapping mapping.launch.py mode:=sim viewer:=true

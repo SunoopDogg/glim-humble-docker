@@ -33,6 +33,8 @@ def generate_launch_description():
                               description='Ouster UDP lidar profile (blank = sensor default)'),
         DeclareLaunchArgument('viewer', default_value='false',
                               description='Enable GLIM Iridescence live viewer (needs X11+GL)'),
+        DeclareLaunchArgument('rviz', default_value='false',
+                              description='Open RViz2 with the mapping view'),
         DeclareLaunchArgument('map_name', default_value='glim_map',
                               description='Map identity -> maps/<map_name>/glim_map.{ply,pcd}'),
     ]
@@ -60,6 +62,7 @@ def generate_launch_description():
             'point_type': LaunchConfiguration('point_type'),
             'udp_profile_lidar': LaunchConfiguration('udp_profile_lidar'),
             'viewer': LaunchConfiguration('viewer'),
+            'rviz': LaunchConfiguration('rviz'),
             'map_name': LaunchConfiguration('map_name'),
         }.items(),
     )
