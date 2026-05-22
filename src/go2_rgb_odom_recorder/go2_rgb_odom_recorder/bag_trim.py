@@ -49,7 +49,8 @@ def main(args=None):
     parser.add_argument('--out', dest='out_uri', required=True,
                         help='output bag dir (must NOT exist)')
     parser.add_argument('--pose-topic', default='/go2/map_pose')
-    parser.add_argument('--rgb-topic', default='/camera/camera/color/image_raw')
+    parser.add_argument('--rgb-topic',
+                        default='/camera/camera/color/image_raw/compressed')
     parser.add_argument('--tolerance', type=float, default=0.1,
                         help='max |rgb_stamp - pose_stamp| to keep an RGB frame (s)')
     parser.add_argument('--storage-id', default='sqlite3')
