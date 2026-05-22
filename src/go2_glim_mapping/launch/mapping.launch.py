@@ -120,7 +120,16 @@ def _launch_setup(context, *args, **kwargs):
             'use_sim_time': use_sim_time,
         }],
     )
-    return _source_actions(mode) + [glim_node, map_saver]
+    nodes = _source_actions(mode) + [glim_node, map_saver]
+    if LaunchConfiguration('rviz').perform(context).lower() in ('true', '1', 'yes'):
+        rviz_cfg = os.path.join(
+            get_package_share_directory('go2_glim_mapping'), 'config', 'rviz', 'mapping.rviz')
+        nodes.append(Node(
+            package='rviz2', executable='rviz2', name='rviz2', output='screen',
+            arguments=['-d', rviz_cfg],
+            parameters=[{'use_sim_time': use_sim_time}],
+        ))
+    return nodes
 
 
 def generate_launch_description():
@@ -134,6 +143,8 @@ def generate_launch_description():
                               description='Root dir for map output (bind-mounted repo by default)'),
         DeclareLaunchArgument('viewer', default_value='false',
                               description='Enable GLIM Iridescence live viewer (needs X11+GL)'),
+        DeclareLaunchArgument('rviz', default_value='false',
+                              description='Open RViz2 with the mapping view (config/rviz/mapping.rviz)'),
         DeclareLaunchArgument('profile', default_value='',
                               description="GLIM config profile override; blank = derived from mode "
                                           "(sim->sim, real/topics->real)"),
